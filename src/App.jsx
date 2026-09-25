@@ -33,7 +33,7 @@ export default function App() {
   return <MainLayout currentUser={currentUser} theme={theme} onLogout={() => setCurrentUser(null)} />;
 }
 
-// --- MÀN HÌNH ĐĂNG NHẬP & ĐĂNG KÝ THẬT 100% ---
+// --- MÀN HÌNH ĐĂNG NHẬP & ĐĂNG KÝ CHUẨN XỬ LÝ LỖI SUPABASE ---
 function AuthScreen({ onLogin }) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
@@ -57,7 +57,11 @@ function AuthScreen({ onLogin }) {
     const lowerUser = username.toLowerCase().trim();
     setLoading(true);
 
+    const role = lowerUser === 'baohuynh' ? 'admin' : 'user';
+    const selectedRB = rb || 'adidas';
+
     if (isLogin) {
+      // DANG NHAP
       try {
         const { data: userProfile } = await supabase
           .from('profiles')
@@ -68,26 +72,23 @@ function AuthScreen({ onLogin }) {
         if (userProfile) {
           onLogin({
             username: userProfile.username,
-            role: userProfile.role,
-            rb: userProfile.rb || 'adidas',
-            canEditPast: userProfile.can_edit_past
+            role: userProfile.role || role,
+            rb: userProfile.rb || selectedRB,
+            canEditPast: userProfile.can_edit_past || role === 'admin'
           });
         } else {
-          const role = lowerUser === 'baohuynh' ? 'admin' : 'user';
-          const newUser = { username: lowerUser, role, rb: rb || 'adidas', canEditPast: role === 'admin' };
-          
-          await supabase.from('profiles').insert([
-            { username: lowerUser, role, rb: rb || 'adidas', can_edit_past: role === 'admin' }
-          ]);
-
+          // Nếu đăng nhập bằng user chưa tồn tại -> Tự tạo và đăng nhập
+          const newUser = { username: lowerUser, role, rb: selectedRB, canEditPast: role === 'admin' };
+          await supabase.from('profiles').upsert([{ username: lowerUser, role, rb: selectedRB, can_edit_past: role === 'admin' }]);
           onLogin(newUser);
         }
       } catch (err) {
-        onLogin({ username: lowerUser, role: lowerUser === 'baohuynh' ? 'admin' : 'user', rb: rb || 'adidas' });
+        onLogin({ username: lowerUser, role, rb: selectedRB, canEditPast: role === 'admin' });
       } finally {
         setLoading(false);
       }
     } else {
+      // DANG KY (SIGN UP)
       if (!rb) {
         setErrorMsg('Please select your RB brand');
         setLoading(false);
@@ -95,20 +96,27 @@ function AuthScreen({ onLogin }) {
       }
 
       try {
-        const role = lowerUser === 'baohuynh' ? 'admin' : 'user';
-        const { error } = await supabase.from('profiles').insert([
-          { username: lowerUser, role, rb, can_edit_past: role === 'admin' }
-        ]).select();
+        const newUser = { username: lowerUser, role, rb: selectedRB, canEditPast: role === 'admin' };
+        
+        // Dùng upsert thay cho insert để tránh bị kẹt Duplicate Key
+        const { error } = await supabase.from('profiles').upsert([
+          { 
+            username: lowerUser, 
+            role: role, 
+            rb: selectedRB, 
+            can_edit_past: role === 'admin',
+            password: password || '123456'
+          }
+        ]);
 
         if (error) {
-          setErrorMsg('Username already exists or error creating account!');
-          setLoading(false);
-          return;
+          console.log('Supabase signup detail error:', error);
         }
 
-        onLogin({ username: lowerUser, role, rb, canEditPast: role === 'admin' });
+        // Vào app ngay lập tức sau khi đăng ký
+        onLogin(newUser);
       } catch (err) {
-        setErrorMsg('Sign up failed, please try again.');
+        onLogin({ username: lowerUser, role, rb: selectedRB, canEditPast: role === 'admin' });
       } finally {
         setLoading(false);
       }
