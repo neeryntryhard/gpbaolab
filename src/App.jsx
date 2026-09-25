@@ -2230,7 +2230,7 @@ function ProfilePage({ user, onLogout, turnsData = {}, progressData = {}, refres
                     <div>
                       <span className="font-bold text-sm block">{tech.name}</span>
                       <span className="text-[10px] text-gray-400 uppercase font-bold">
-                        RB: <span className="text-yellow-400">{tech.rb}</span> • {tech.canEditPast ? 'Edit Past: Granted' : 'Edit Past: Blocked'}
+                        RB: <span className="text-yellow-400">{tech.rb}</span> • {tech.canEditPast ? 'Edit Access: Granted' : 'Edit Access: Blocked'}
                       </span>
                     </div>
 
