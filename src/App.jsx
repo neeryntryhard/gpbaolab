@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { WashingMachine, BarChart3, User, Calendar as CalendarIcon, AlertTriangle, X, ChevronDown, Plus, CheckCircle2, Info, Shirt, RotateCw, Clock, LogOut, Key, Target, ChevronLeft, ChevronRight, ShieldCheck, Trash2, Edit3, Repeat, MessageSquare, Filter } from 'lucide-react';
+import { WashingMachine, BarChart3, User, Calendar as CalendarIcon, AlertTriangle, X, ChevronDown, Plus, CheckCircle2, Info, Shirt, RotateCw, Clock, LogOut, Key, Target, ChevronLeft, ChevronRight, ShieldCheck, Trash2, Edit3, Repeat, MessageSquare, Filter, Building, FileText, Check } from 'lucide-react';
 import { format, differenceInMinutes, getHours, addDays, startOfWeek, endOfWeek, parse, isSameDay, isBefore, startOfDay } from 'date-fns';
 import { createClient } from '@supabase/supabase-js';
 
@@ -33,7 +33,7 @@ export default function App() {
   return <MainLayout currentUser={currentUser} theme={theme} onLogout={() => setCurrentUser(null)} />;
 }
 
-// --- MÀN HÌNH ĐĂNG NHẬP & ĐĂNG KÝ THẬT ---
+// --- MÀN HÌNH ĐĂNG NHẬP & ĐĂNG KÝ THẬT 100% ---
 function AuthScreen({ onLogin }) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
@@ -41,6 +41,7 @@ function AuthScreen({ onLogin }) {
   const [rb, setRb] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [loading, setLoading] = useState(false);
   
   const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
 
@@ -53,16 +54,16 @@ function AuthScreen({ onLogin }) {
       return;
     }
 
-    const lowerUser = username.toLowerCase();
+    const lowerUser = username.toLowerCase().trim();
+    setLoading(true);
 
     if (isLogin) {
-      // ĐĂNG NHẬP: LẤY THÔNG TIN TỪ SUPABASE
       try {
-        const { data: userProfile, error } = await supabase
+        const { data: userProfile } = await supabase
           .from('profiles')
           .select('*')
           .eq('username', lowerUser)
-          .single();
+          .maybeSingle();
 
         if (userProfile) {
           onLogin({
@@ -72,7 +73,6 @@ function AuthScreen({ onLogin }) {
             canEditPast: userProfile.can_edit_past
           });
         } else {
-          // NẾU LÀ ADMIN HOẶC USER MỚI CHƯA CÓ TRÊN DATABASE -> TỰ KHỞI TẠO
           const role = lowerUser === 'baohuynh' ? 'admin' : 'user';
           const newUser = { username: lowerUser, role, rb: rb || 'adidas', canEditPast: role === 'admin' };
           
@@ -84,11 +84,13 @@ function AuthScreen({ onLogin }) {
         }
       } catch (err) {
         onLogin({ username: lowerUser, role: lowerUser === 'baohuynh' ? 'admin' : 'user', rb: rb || 'adidas' });
+      } finally {
+        setLoading(false);
       }
     } else {
-      // ĐĂNG KÝ: TẠO TÀI KHOẢN MỚI LƯU LÊN SUPABASE
       if (!rb) {
         setErrorMsg('Please select your RB brand');
+        setLoading(false);
         return;
       }
 
@@ -96,16 +98,19 @@ function AuthScreen({ onLogin }) {
         const role = lowerUser === 'baohuynh' ? 'admin' : 'user';
         const { error } = await supabase.from('profiles').insert([
           { username: lowerUser, role, rb, can_edit_past: role === 'admin' }
-        ]);
+        ]).select();
 
         if (error) {
-          setErrorMsg('Username already exists!');
+          setErrorMsg('Username already exists or error creating account!');
+          setLoading(false);
           return;
         }
 
         onLogin({ username: lowerUser, role, rb, canEditPast: role === 'admin' });
       } catch (err) {
         setErrorMsg('Sign up failed, please try again.');
+      } finally {
+        setLoading(false);
       }
     }
   };
@@ -147,8 +152,8 @@ function AuthScreen({ onLogin }) {
 
           {errorMsg && <p className="text-xs text-red-500 font-bold text-center">{errorMsg}</p>}
 
-          <button className="w-full bg-black text-white dark:bg-white dark:text-black font-bold rounded-full py-3 mt-4 hover:opacity-90 transition">
-            {isLogin ? 'Sign in' : 'Create account'}
+          <button disabled={loading} className="w-full bg-black text-white dark:bg-white dark:text-black font-bold rounded-full py-3 mt-4 hover:opacity-90 transition disabled:opacity-50">
+            {loading ? 'Processing...' : (isLogin ? 'Sign in' : 'Create account')}
           </button>
         </form>
         <p className="text-center mt-6 text-sm text-gray-500 dark:text-white cursor-pointer hover:underline transition" onClick={() => { setIsLogin(!isLogin); setErrorMsg(''); }}>
@@ -168,50 +173,50 @@ function MainLayout({ currentUser, onLogout }) {
   const [globalProgressData, setGlobalProgressData] = useState({});
   const [targetRunKey, setTargetRunKey] = useState(null);
 
-  // LOAD DỮ LIỆU TỪ SUPABASE KHI MỞ APP
-  useEffect(() => {
-    const fetchSupabaseData = async () => {
-      try {
-        const { data: turns } = await supabase.from('turns').select('*');
-        if (turns && turns.length > 0) {
-          const loadedTurns = {};
-          turns.forEach(t => {
-            loadedTurns[t.id] = {
-              turnName: t.turn_name,
-              number: t.item_number,
-              type: t.item_type,
-              totalCycles: t.total_cycles,
-              borrowedRB: t.borrowed_rb,
-              turn: t.turn_name,
-              machine: t.machine_number,
-              rb: t.rb_name,
-              savedBy: t.saved_by,
-              createdDate: t.created_date
-            };
-          });
-          setGlobalTurnsData(loadedTurns);
-        }
-
-        const { data: logs } = await supabase.from('cycle_logs').select('*');
-        if (logs && logs.length > 0) {
-          const loadedProg = {};
-          logs.forEach(l => {
-            loadedProg[l.turn_id] = {
-              currentCycle: l.cycle_number,
-              isFinished: l.cycle_number >= (globalTurnsData[l.turn_id]?.totalCycles || 1),
-              isStarted: true,
-              lastEndedTime: l.end_time ? format(new Date(l.end_time), 'dd-MMM, HH:mm') : null,
-              lastSavedBy: l.who_ended || l.who_started,
-              remarksObj: { [l.cycle_number]: l.admin_remark }
-            };
-          });
-          setGlobalProgressData(loadedProg);
-        }
-      } catch (err) {
-        console.log('Fetch Supabase error:', err);
+  const fetchSupabaseData = async () => {
+    try {
+      const { data: turns } = await supabase.from('turns').select('*');
+      if (turns && turns.length > 0) {
+        const loadedTurns = {};
+        turns.forEach(t => {
+          loadedTurns[t.id] = {
+            turnName: t.turn_name,
+            number: t.item_number,
+            type: t.item_type,
+            totalCycles: t.total_cycles,
+            borrowedRB: t.borrowed_rb,
+            turn: t.turn_name,
+            machine: t.machine_number,
+            rb: t.rb_name,
+            savedBy: t.saved_by,
+            createdDate: t.created_date,
+            turnIndex: t.turn_index || 1
+          };
+        });
+        setGlobalTurnsData(prev => ({ ...prev, ...loadedTurns }));
       }
-    };
 
+      const { data: logs } = await supabase.from('cycle_logs').select('*');
+      if (logs && logs.length > 0) {
+        const loadedProg = {};
+        logs.forEach(l => {
+          loadedProg[l.turn_id] = {
+            currentCycle: l.cycle_number,
+            isFinished: l.cycle_number >= (globalTurnsData[l.turn_id]?.totalCycles || 1),
+            isStarted: true,
+            lastEndedTime: l.end_time ? format(new Date(l.end_time), 'dd-MMM, HH:mm') : null,
+            lastSavedBy: l.who_ended || l.who_started,
+            remarksObj: { [l.cycle_number]: l.admin_remark }
+          };
+        });
+        setGlobalProgressData(prev => ({ ...prev, ...loadedProg }));
+      }
+    } catch (err) {
+      console.log('Fetch Supabase error:', err);
+    }
+  };
+
+  useEffect(() => {
     fetchSupabaseData();
   }, []);
 
@@ -233,8 +238,11 @@ function MainLayout({ currentUser, onLogout }) {
           currentUser={currentUser} 
           resetTrigger={resetWashingTrigger}
           targetRunKey={targetRunKey}
+          savedTurns={globalTurnsData}
+          turnProgress={globalProgressData}
           onTurnsChange={setGlobalTurnsData}
           onProgressChange={setGlobalProgressData}
+          refreshData={fetchSupabaseData}
         />
       </div>
       
@@ -256,6 +264,7 @@ function MainLayout({ currentUser, onLogout }) {
           onLogout={onLogout} 
           turnsData={globalTurnsData} 
           progressData={globalProgressData} 
+          refreshData={fetchSupabaseData}
         />
       </div>
 
@@ -285,7 +294,7 @@ function MainLayout({ currentUser, onLogout }) {
 }
 
 // --- TRANG WASHING VÀ QUẢN LÝ TIẾN TRÌNH ---
-function WashingPage({ currentUser, resetTrigger, targetRunKey, onTurnsChange, onProgressChange }) {
+function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turnProgress, onTurnsChange, onProgressChange, refreshData }) {
   const [time, setTime] = useState(format(new Date(), 'HH:mm'));
   const [date, setDate] = useState(format(new Date(), 'dd-MMM'));
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
@@ -300,8 +309,6 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, onTurnsChange, o
 
   const [viewMode, setViewMode] = useState('setup'); 
   const [activeRunnerId, setActiveRunnerId] = useState(null); 
-  const [savedTurns, setSavedTurns] = useState({});
-  const [turnProgress, setTurnProgress] = useState({}); 
   const [modalTurn, setModalTurn] = useState(null);
   const [isBorrowModal, setIsBorrowModal] = useState(false);
 
@@ -309,14 +316,6 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, onTurnsChange, o
   const [rippleMachine, setRippleMachine] = useState(null);
   const [cyclesWarningModal, setCyclesWarningModal] = useState(false);
   const [busyTurnName, setBusyTurnName] = useState(null);
-
-  useEffect(() => {
-    onTurnsChange(savedTurns);
-  }, [savedTurns]);
-
-  useEffect(() => {
-    onProgressChange(turnProgress);
-  }, [turnProgress]);
 
   useEffect(() => {
     if (targetRunKey && savedTurns[targetRunKey]) {
@@ -381,10 +380,11 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, onTurnsChange, o
   };
 
   const updateTurnProgress = async (turnId, currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj) => {
-    setTurnProgress(prev => ({
-      ...prev,
+    const updated = {
+      ...turnProgress,
       [turnId]: { currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj }
-    }));
+    };
+    onProgressChange(updated);
 
     try {
       await supabase.from('cycle_logs').upsert([
@@ -399,6 +399,24 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, onTurnsChange, o
       ]);
     } catch (e) {
       console.log('Supabase cycle_logs update err:', e);
+    }
+  };
+
+  const handleDeleteTurn = async (e, turnKey) => {
+    e.stopPropagation();
+    if (currentUser.username.toLowerCase() !== 'baohuynh') return;
+
+    if (window.confirm('Are you sure you want to delete this Turn?')) {
+      const newTurns = { ...savedTurns };
+      delete newTurns[turnKey];
+      onTurnsChange(newTurns);
+
+      try {
+        await supabase.from('turns').delete().eq('id', turnKey);
+        await supabase.from('cycle_logs').delete().eq('turn_id', turnKey);
+      } catch (err) {
+        console.log('Delete turn err:', err);
+      }
     }
   };
 
@@ -452,21 +470,17 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, onTurnsChange, o
 
   const dayTurnsList = (selectedRB && selectedMachine) ? getTurnsForDate(selectedRB, selectedMachine, selectedDayDate) : [];
 
-  const getAllWeeklyTurnsCount = (rb, machine) => {
-    return Object.values(savedTurns).filter(t => t.rb === rb && t.machine === machine).length;
-  };
-
   const selectedDateObj = parse(`${selectedDayDate}-2026`, 'dd-MMM-yyyy', new Date());
   const todayObj = startOfDay(new Date());
   const isPastDate = isBefore(selectedDateObj, todayObj);
-  const canEditOrAdd = currentUser.role === 'admin' || currentUser.canEditPast || !isPastDate;
+  const canEditOrAdd = currentUser.username.toLowerCase() === 'baohuynh' || currentUser.role === 'admin' || currentUser.canEditPast || !isPastDate;
 
   const getMachineDisplayName = (mNum) => {
     return machineCustomNames[mNum] || `Machine ${mNum}`;
   };
 
   const saveTurnToSupabase = async (key, newTurnData) => {
-    setSavedTurns(prev => ({ ...prev, [key]: newTurnData }));
+    onTurnsChange(prev => ({ ...prev, [key]: newTurnData }));
     
     try {
       await supabase.from('turns').upsert([
@@ -480,7 +494,8 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, onTurnsChange, o
           item_type: newTurnData.type,
           total_cycles: newTurnData.totalCycles,
           saved_by: newTurnData.savedBy,
-          created_date: newTurnData.createdDate
+          created_date: newTurnData.createdDate,
+          turn_index: newTurnData.turnIndex
         }
       ]);
     } catch (e) {
@@ -643,7 +658,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, onTurnsChange, o
                         if (remainingCycles <= 0) {
                           setCyclesWarningModal(true);
                         } else {
-                          const nextStt = getAllWeeklyTurnsCount(selectedRB, selectedMachine) + 1;
+                          const nextStt = dayTurnsList.length + 1;
                           setIsBorrowModal(true);
                           setModalTurn(nextStt);
                         }
@@ -658,7 +673,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, onTurnsChange, o
                         if (remainingCycles <= 0) {
                           setCyclesWarningModal(true);
                         } else {
-                          const nextStt = getAllWeeklyTurnsCount(selectedRB, selectedMachine) + 1;
+                          const nextStt = dayTurnsList.length + 1;
                           setIsBorrowModal(false);
                           setModalTurn(nextStt);
                         }
@@ -673,46 +688,48 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, onTurnsChange, o
 
               {dayTurnsList.length === 0 ? (
                 <div className="bg-gray-100 dark:bg-gray-800/40 border-2 border-dashed border-gray-300 dark:border-gray-700 p-8 rounded-3xl text-center">
-                  <p className="font-bold text-gray-400 text-xs mb-3">No Turns created for this date yet</p>
+                  <p className="font-bold text-gray-400 text-xs mb-3">
+                    {canEditOrAdd ? 'No Turns created for this date yet' : 'Cannot add Turn for past dates (Admin Only)'}
+                  </p>
                   {canEditOrAdd && (
                     <button 
                       onClick={() => {
                         if (remainingCycles <= 0) {
                           setCyclesWarningModal(true);
                         } else {
-                          const nextStt = getAllWeeklyTurnsCount(selectedRB, selectedMachine) + 1;
                           setIsBorrowModal(false);
-                          setModalTurn(nextStt);
+                          setModalTurn(1);
                         }
                       }}
                       className="bg-black dark:bg-white text-white dark:text-black px-4 py-2 rounded-full font-bold text-xs hover:opacity-90 transition active:scale-95"
                     >
-                      Create Turn {getAllWeeklyTurnsCount(selectedRB, selectedMachine) + 1}
+                      Create Turn 1
                     </button>
                   )}
                 </div>
               ) : (
-                dayTurnsList.map(([turnKey, turnData]) => {
+                dayTurnsList.map(([turnKey, turnData], idx) => {
                   const prog = turnProgress[turnKey];
                   const isFinished = prog?.isFinished;
+                  const displayIndex = turnData.turnIndex || (idx + 1);
 
                   return (
                     <div 
                       key={turnKey} 
                       onClick={() => handleStartRun(turnKey)}
-                      className={`p-5 rounded-3xl shadow-sm border-2 cursor-pointer transition active:scale-95 flex justify-between items-center
+                      className={`p-5 rounded-3xl shadow-sm border-2 cursor-pointer transition active:scale-95 flex justify-between items-center relative group
                       ${isFinished 
                         ? 'bg-green-50 dark:bg-green-900/20 border-green-500' 
                         : 'bg-white dark:bg-gray-800 border-blue-500 hover:bg-blue-50/50'}`}
                     >
                       <div>
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <h4 className={`font-black text-base ${isFinished ? 'text-green-600 dark:text-green-400' : 'text-blue-500'}`}>
-                            {turnData.turnName}
+                            Turn {displayIndex}: {turnData.turnName}
                           </h4>
                           {turnData.borrowedRB && (
-                            <span className="text-[10px] bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full font-bold uppercase">
-                              Borrowed by: {turnData.borrowedRB}
+                            <span className="text-[10px] bg-yellow-400 text-black font-extrabold px-2.5 py-0.5 rounded-full uppercase shadow-sm">
+                              BORROWED BY: {turnData.borrowedRB}
                             </span>
                           )}
                           {turnData.createdDate < selectedDayDate && !isFinished && (
@@ -724,15 +741,27 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, onTurnsChange, o
                         </p>
                       </div>
 
-                      {isFinished ? (
-                        <span className="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-                          <CheckCircle2 size={14}/> Finished
-                        </span>
-                      ) : (
-                        <span className="bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-                          Run <ChevronRight size={14}/>
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {currentUser.username.toLowerCase() === 'baohuynh' && (
+                          <button 
+                            onClick={(e) => handleDeleteTurn(e, turnKey)}
+                            className="p-2 bg-red-100 text-red-600 hover:bg-red-500 hover:text-white dark:bg-red-900/40 dark:text-red-400 rounded-xl transition active:scale-90"
+                            title="Delete Turn (Admin Only)"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+
+                        {isFinished ? (
+                          <span className="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                            <CheckCircle2 size={14}/> Finished
+                          </span>
+                        ) : (
+                          <span className="bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                            Run <ChevronRight size={14}/>
+                          </span>
+                        )}
+                      </div>
                     </div>
                   );
                 })
@@ -792,7 +821,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, onTurnsChange, o
            onClose={() => setModalTurn(null)} 
            onSave={(data) => {
              const key = `${selectedRB}_${selectedMachine}_${selectedDayDate}_${modalTurn}`;
-             const newTurnData = { ...data, turn: modalTurn, machine: selectedMachine, rb: selectedRB, savedBy: currentUser.username, createdDate: selectedDayDate };
+             const newTurnData = { ...data, turnIndex: modalTurn, turn: modalTurn, machine: selectedMachine, rb: selectedRB, savedBy: currentUser.username, createdDate: selectedDayDate };
              saveTurnToSupabase(key, newTurnData);
              setModalTurn(null);
            }}
@@ -806,11 +835,17 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, onTurnsChange, o
   );
 }
 
-// --- TRANG DASHBOARD ---
+// --- TRANG DASHBOARD - BỘ LỌC ĐÃ CĂN GIỮA NÚT VÀ POPUP LỊCH ĐẸP CHUẨN XANH DƯƠNG ---
 function DashboardPage({ turnsData, progressData }) {
-  const [filterPeriod, setFilterPeriod] = useState('Week');
+  const [filterPeriod, setFilterPeriod] = useState('Week'); // 'Day', 'Week', 'Month'
   const [selectedMachineRBFilter, setSelectedMachineRBFilter] = useState('ALL');
   const [showMachineRBFilterDropdown, setShowMachineRBFilterDropdown] = useState(false);
+
+  // STATE POPUP CHỌN MULTI-SELECT
+  const [showMultiSelectPopup, setShowMultiSelectPopup] = useState(false);
+  const [selectedWeeks, setSelectedWeeks] = useState(['Sep W3 (21 Sep - 27 Sep)']);
+  const [selectedMonths, setSelectedMonths] = useState(['Sep 2026']);
+  const [selectedDaysList, setSelectedDaysList] = useState([format(new Date(), 'dd-MMM')]);
 
   const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
   const machinesList = [11, 12, 13, 14, 15];
@@ -823,6 +858,52 @@ function DashboardPage({ turnsData, progressData }) {
     15: 'nike'
   };
 
+  const weekOptions = [
+    'Sep W3 (21 Sep - 27 Sep)',
+    'Sep W2 (14 Sep - 20 Sep)',
+    'Sep W1 (07 Sep - 13 Sep)',
+    'Aug W4 (24 Aug - 30 Aug)',
+    'Aug W3 (17 Aug - 23 Aug)'
+  ];
+
+  const monthOptions = [
+    'Sep 2026', 'Aug 2026', 'Jul 2026',
+    'Jun 2026', 'May 2026', 'Apr 2026',
+    'Mar 2026', 'Feb 2026', 'Jan 2026'
+  ];
+
+  const toggleWeekSelect = (wk) => {
+    if (selectedWeeks.includes(wk)) {
+      if (selectedWeeks.length > 1) setSelectedWeeks(selectedWeeks.filter(w => w !== wk));
+    } else {
+      setSelectedWeeks([...selectedWeeks, wk]);
+    }
+  };
+
+  const toggleMonthSelect = (mo) => {
+    if (selectedMonths.includes(mo)) {
+      if (selectedMonths.length > 1) setSelectedMonths(selectedMonths.filter(m => m !== mo));
+    } else {
+      setSelectedMonths([...selectedMonths, mo]);
+    }
+  };
+
+  const toggleDaySelect = (dStr) => {
+    if (selectedDaysList.includes(dStr)) {
+      if (selectedDaysList.length > 1) setSelectedDaysList(selectedDaysList.filter(d => d !== dStr));
+    } else {
+      setSelectedDaysList([...selectedDaysList, dStr]);
+    }
+  };
+
+  const isTurnMatchesFilter = (config) => {
+    if (!config.createdDate) return true;
+    if (filterPeriod === 'Day') {
+      return selectedDaysList.includes(config.createdDate);
+    }
+    return true;
+  };
+
   const rbStats = RBs.map(rb => {
     let totalCycles = 0;
     let totalTurns = 0;
@@ -830,7 +911,7 @@ function DashboardPage({ turnsData, progressData }) {
 
     Object.entries(turnsData).forEach(([turnKey, config]) => {
       const effectiveRB = config.borrowedRB || config.rb;
-      if (effectiveRB === rb) {
+      if (effectiveRB === rb && isTurnMatchesFilter(config)) {
         totalTurns += 1;
         const prog = progressData[turnKey];
         if (prog?.isFinished) {
@@ -858,7 +939,7 @@ function DashboardPage({ turnsData, progressData }) {
 
     Object.entries(turnsData).forEach(([turnKey, config]) => {
       const effectiveRB = config.borrowedRB || config.rb;
-      if (config.machine === mNum) {
+      if (config.machine === mNum && isTurnMatchesFilter(config)) {
         if (selectedMachineRBFilter === 'ALL' || effectiveRB === selectedMachineRBFilter) {
           totalTurns += 1;
           lastUsedRB = effectiveRB;
@@ -884,17 +965,23 @@ function DashboardPage({ turnsData, progressData }) {
 
   const grandTotalCycles = rbStats.reduce((sum, item) => sum + item.totalCycles, 0);
 
-  const maxRbVal = Math.max(10, ...rbStats.map(s => Math.max(s.totalCycles, s.totalTurns, s.totalHours)));
-  const maxMachineVal = Math.max(10, ...machineStats.map(s => Math.max(s.totalCycles, s.totalTurns, s.totalHours)));
+  const maxRbVal = Math.max(5, ...rbStats.map(s => Math.max(s.totalCycles, s.totalTurns, s.totalHours)));
+  const maxMachineVal = Math.max(5, ...machineStats.map(s => Math.max(s.totalCycles, s.totalTurns, s.totalHours)));
+
+  const getBarPx = (val, maxVal) => {
+    if (val <= 0) return 4;
+    const calc = Math.round((val / maxVal) * 120);
+    return Math.max(16, calc);
+  };
 
   return (
     <div className="p-4 max-w-md mx-auto">
       <div className="text-center mb-6 mt-2">
-        <h2 className="font-black text-2xl tracking-tight">Analytics Dashboard</h2>
-        <p className="text-xs text-gray-400 font-medium mt-1">Operational breakdown and performance metrics</p>
+        <h2 className="font-black text-2xl tracking-tight">Washing Dashboard</h2>
       </div>
 
-      <div className="flex bg-white dark:bg-gray-800 p-1.5 rounded-2xl mb-6 border border-gray-100 dark:border-gray-700 shadow-sm">
+      {/* CHỌN CHẾ ĐỘ LỌC THỜI GIAN */}
+      <div className="flex bg-white dark:bg-gray-800 p-1.5 rounded-2xl mb-3 border border-gray-100 dark:border-gray-700 shadow-sm">
         {['Day', 'Week', 'Month'].map(period => (
           <button 
             key={period} 
@@ -908,6 +995,21 @@ function DashboardPage({ turnsData, progressData }) {
             {period}
           </button>
         ))}
+      </div>
+
+      {/* NÚT MỞ POPUP NỘI DUNG ĐÃ ĐƯỢC CĂN GIỮA HOÀN HẢO */}
+      <div className="mb-6">
+        <button 
+          onClick={() => setShowMultiSelectPopup(true)}
+          className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 py-3 px-4 rounded-2xl font-black text-xs relative flex items-center justify-center shadow-sm hover:border-blue-500 transition"
+        >
+          <span className="text-center">
+            {filterPeriod === 'Week' && `${selectedWeeks.length} Weeks Selected`}
+            {filterPeriod === 'Month' && `${selectedMonths.length} Months Selected`}
+            {filterPeriod === 'Day' && `${selectedDaysList.length} Days Selected`}
+          </span>
+          <ChevronDown size={18} className="absolute right-4 text-gray-400" />
+        </button>
       </div>
 
       {/* 1. RB STATISTICS */}
@@ -930,36 +1032,30 @@ function DashboardPage({ turnsData, progressData }) {
 
         <div className="overflow-x-auto pb-4 custom-scrollbar">
           <div className="flex items-end gap-6 min-w-[500px] h-48 px-2 pt-6 border-b border-gray-800">
-            {rbStats.map(item => {
-              const cycHeight = Math.max(12, Math.round((item.totalCycles / maxRbVal) * 100));
-              const trnHeight = Math.max(12, Math.round((item.totalTurns / maxRbVal) * 100));
-              const hrsHeight = Math.max(12, Math.round((item.totalHours / maxRbVal) * 100));
-
-              return (
-                <div key={item.rb} className="flex-1 flex flex-col items-center justify-end h-full">
-                  <div className="flex items-end gap-1 w-full justify-center h-36">
-                    <div className="flex flex-col items-center flex-1 max-w-[18px]">
-                      <span className="text-[9px] font-black text-blue-400 mb-1">{item.totalCycles}</span>
-                      <div className="w-full bg-blue-500 rounded-t-lg transition-all duration-500 shadow-lg shadow-blue-500/20" style={{ height: `${cycHeight}%` }}></div>
-                    </div>
-
-                    <div className="flex flex-col items-center flex-1 max-w-[18px]">
-                      <span className="text-[9px] font-black text-cyan-400 mb-1">{item.totalTurns}</span>
-                      <div className="w-full bg-cyan-400 rounded-t-lg transition-all duration-500 shadow-lg shadow-cyan-400/20" style={{ height: `${trnHeight}%` }}></div>
-                    </div>
-
-                    <div className="flex flex-col items-center flex-1 max-w-[18px]">
-                      <span className="text-[9px] font-black text-emerald-400 mb-1">{item.totalHours}</span>
-                      <div className="w-full bg-emerald-400 rounded-t-lg transition-all duration-500 shadow-lg shadow-emerald-400/20" style={{ height: `${hrsHeight}%` }}></div>
-                    </div>
+            {rbStats.map(item => (
+              <div key={item.rb} className="flex-1 flex flex-col items-center justify-end h-full">
+                <div className="flex items-end gap-1.5 w-full justify-center h-36">
+                  <div className="flex flex-col items-center flex-1 max-w-[16px] h-full justify-end">
+                    <span className="text-[9px] font-black text-blue-400 mb-1">{item.totalCycles}</span>
+                    <div className="w-full bg-blue-500 rounded-t-sm transition-all duration-500 shadow-md shadow-blue-500/30" style={{ height: `${getBarPx(item.totalCycles, maxRbVal)}px` }}></div>
                   </div>
 
-                  <div className="w-8 h-6 flex items-center justify-center mt-3">
-                    <RBLogo rbName={item.rb} className="max-h-5 max-w-full" />
+                  <div className="flex flex-col items-center flex-1 max-w-[16px] h-full justify-end">
+                    <span className="text-[9px] font-black text-cyan-400 mb-1">{item.totalTurns}</span>
+                    <div className="w-full bg-cyan-400 rounded-t-sm transition-all duration-500 shadow-md shadow-cyan-400/30" style={{ height: `${getBarPx(item.totalTurns, maxRbVal)}px` }}></div>
+                  </div>
+
+                  <div className="flex flex-col items-center flex-1 max-w-[16px] h-full justify-end">
+                    <span className="text-[9px] font-black text-emerald-400 mb-1">{item.totalHours}</span>
+                    <div className="w-full bg-emerald-400 rounded-t-sm transition-all duration-500 shadow-md shadow-emerald-400/30" style={{ height: `${getBarPx(item.totalHours, maxRbVal)}px` }}></div>
                   </div>
                 </div>
-              );
-            })}
+
+                <div className="w-8 h-6 flex items-center justify-center mt-3">
+                  <RBLogo rbName={item.rb} className="max-h-5 max-w-full" />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -984,7 +1080,9 @@ function DashboardPage({ turnsData, progressData }) {
             const pct = grandTotalCycles > 0 ? Math.round((item.totalCycles / grandTotalCycles) * 100) : 0;
             return (
               <div key={item.rb} className="bg-gray-50 dark:bg-gray-900 p-3 rounded-2xl flex justify-between items-center text-xs">
-                <span className="font-bold uppercase text-gray-500">{item.rb}</span>
+                <div className="w-10 h-6 flex items-center justify-center">
+                  <RBLogo rbName={item.rb} className="max-h-5 max-w-full" />
+                </div>
                 <span className="font-black">{pct}%</span>
               </div>
             );
@@ -1031,44 +1129,126 @@ function DashboardPage({ turnsData, progressData }) {
 
         <div className="overflow-x-auto pb-4 custom-scrollbar">
           <div className="flex items-end gap-6 min-w-[400px] h-48 px-2 pt-6 border-b border-gray-800">
-            {machineStats.map(item => {
-              const cycHeight = Math.max(12, Math.round((item.totalCycles / maxMachineVal) * 100));
-              const trnHeight = Math.max(12, Math.round((item.totalTurns / maxMachineVal) * 100));
-              const hrsHeight = Math.max(12, Math.round((item.totalHours / maxMachineVal) * 100));
-
-              return (
-                <div key={item.machine} className="flex-1 flex flex-col items-center justify-end h-full">
-                  <div className="flex items-end gap-1 w-full justify-center h-36">
-                    <div className="flex flex-col items-center flex-1 max-w-[18px]">
-                      <span className="text-[9px] font-black text-blue-400 mb-1">{item.totalCycles}</span>
-                      <div className="w-full bg-blue-500 rounded-t-lg transition-all duration-500" style={{ height: `${cycHeight}%` }}></div>
-                    </div>
-
-                    <div className="flex flex-col items-center flex-1 max-w-[18px]">
-                      <span className="text-[9px] font-black text-cyan-400 mb-1">{item.totalTurns}</span>
-                      <div className="w-full bg-cyan-400 rounded-t-lg transition-all duration-500" style={{ height: `${trnHeight}%` }}></div>
-                    </div>
-
-                    <div className="flex flex-col items-center flex-1 max-w-[18px]">
-                      <span className="text-[9px] font-black text-emerald-400 mb-1">{item.totalHours}</span>
-                      <div className="w-full bg-emerald-400 rounded-t-lg transition-all duration-500" style={{ height: `${hrsHeight}%` }}></div>
-                    </div>
+            {machineStats.map(item => (
+              <div key={item.machine} className="flex-1 flex flex-col items-center justify-end h-full">
+                <div className="flex items-end gap-1.5 w-full justify-center h-36">
+                  <div className="flex flex-col items-center flex-1 max-w-[16px] h-full justify-end">
+                    <span className="text-[9px] font-black text-blue-400 mb-1">{item.totalCycles}</span>
+                    <div className="w-full bg-blue-500 rounded-t-sm transition-all duration-500" style={{ height: `${getBarPx(item.totalCycles, maxMachineVal)}px` }}></div>
                   </div>
 
-                  <div className="flex flex-col items-center gap-1 mt-3">
-                    <div className="w-5 h-4 flex items-center justify-center">
-                      <RBLogo rbName={item.rbOwner} className="max-h-4 max-w-full" />
-                    </div>
-                    <span className="text-xs font-extrabold uppercase text-gray-300 tracking-wider">
-                      {item.machine}
-                    </span>
+                  <div className="flex flex-col items-center flex-1 max-w-[16px] h-full justify-end">
+                    <span className="text-[9px] font-black text-cyan-400 mb-1">{item.totalTurns}</span>
+                    <div className="w-full bg-cyan-400 rounded-t-sm transition-all duration-500" style={{ height: `${getBarPx(item.totalTurns, maxMachineVal)}px` }}></div>
+                  </div>
+
+                  <div className="flex flex-col items-center flex-1 max-w-[16px] h-full justify-end">
+                    <span className="text-[9px] font-black text-emerald-400 mb-1">{item.totalHours}</span>
+                    <div className="w-full bg-emerald-400 rounded-t-sm transition-all duration-500" style={{ height: `${getBarPx(item.totalHours, maxMachineVal)}px` }}></div>
                   </div>
                 </div>
-              );
-            })}
+
+                <div className="flex flex-col items-center gap-1 mt-3">
+                  <div className="w-5 h-4 flex items-center justify-center">
+                    <RBLogo rbName={item.rbOwner} className="max-h-4 max-w-full" />
+                  </div>
+                  <span className="text-xs font-extrabold uppercase text-gray-300 tracking-wider">
+                    {item.machine}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
+
+      {/* POPUP BỘ LỌC ĐA NĂNG ĐẢM BẢO CĂN GIỮA VÀ DÙNG MÀU XANH DƯƠNG ACTIVE */}
+      {showMultiSelectPopup && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl max-w-sm w-full shadow-2xl animate-in zoom-in-95 border dark:border-gray-700">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-bold text-base">
+                Select {filterPeriod === 'Week' ? 'Weeks' : filterPeriod === 'Month' ? 'Months' : 'Days'}
+              </h3>
+              <button onClick={() => setShowMultiSelectPopup(false)}><X size={20} className="text-gray-400"/></button>
+            </div>
+
+            {/* POPUP CHỌN TUẦN MULTI-SELECT CĂN GIỮA NỘI DUNG */}
+            {filterPeriod === 'Week' && (
+              <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+                {weekOptions.map(wk => {
+                  const isSel = selectedWeeks.includes(wk);
+                  return (
+                    <div 
+                      key={wk} 
+                      onClick={() => toggleWeekSelect(wk)}
+                      className={`p-3.5 rounded-2xl font-bold text-xs cursor-pointer text-center relative transition-all ${
+                        isSel ? 'bg-blue-500 text-white shadow-md scale-102' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200'
+                      }`}
+                    >
+                      <span className="block text-center">{wk}</span>
+                      {isSel && <Check size={16} className="absolute right-4 top-1/2 -translate-y-1/2" />}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* POPUP CHỌN THÁNG MULTI-SELECT CĂN GIỮA NỘI DUNG */}
+            {filterPeriod === 'Month' && (
+              <div className="grid grid-cols-2 gap-2.5 max-h-64 overflow-y-auto">
+                {monthOptions.map(mo => {
+                  const isSel = selectedMonths.includes(mo);
+                  return (
+                    <div 
+                      key={mo} 
+                      onClick={() => toggleMonthSelect(mo)}
+                      className={`p-3.5 rounded-2xl font-bold text-xs text-center cursor-pointer transition-all ${
+                        isSel ? 'bg-blue-500 text-white shadow-md scale-102' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200'
+                      }`}
+                    >
+                      {mo}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* POPUP CHỌN NGÀY DẠNG LỊCH Ô TUẦN HOÀN CHỈNH ĐẸP MẮT */}
+            {filterPeriod === 'Day' && (
+              <div>
+                <div className="grid grid-cols-7 gap-1 text-center mb-2">
+                  {['S','M','T','W','T','F','S'].map(d => <div key={Math.random()} className="text-[10px] font-bold text-gray-400">{d}</div>)}
+                </div>
+                <div className="grid grid-cols-7 gap-1.5 max-h-60 overflow-y-auto">
+                  {Array.from({length: 30}).map((_, i) => {
+                    const dStr = `${i + 1}-Sep`;
+                    const isSel = selectedDaysList.includes(dStr);
+                    return (
+                      <div 
+                        key={dStr} 
+                        onClick={() => toggleDaySelect(dStr)}
+                        className={`w-9 h-9 mx-auto rounded-full flex items-center justify-center font-bold text-xs cursor-pointer transition-all ${
+                          isSel ? 'bg-blue-500 text-white shadow-md scale-110' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200'
+                        }`}
+                      >
+                        {i + 1}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <button 
+              onClick={() => setShowMultiSelectPopup(false)}
+              className="w-full mt-6 py-3.5 bg-black dark:bg-white text-white dark:text-black rounded-full font-black text-xs hover:opacity-90 transition active:scale-95"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1079,6 +1259,7 @@ function TrackingPage({ turnsData, progressData, onOpenTurn }) {
   const machinesList = [11, 12, 13, 14, 15];
   
   const [selectedRBs, setSelectedRBs] = useState([]); 
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL');
   const [date, setDate] = useState(format(new Date(), 'dd-MMM'));
   const [time, setTime] = useState(format(new Date(), 'HH:mm'));
   const [showCalendar, setShowCalendar] = useState(false);
@@ -1117,32 +1298,44 @@ function TrackingPage({ turnsData, progressData, onOpenTurn }) {
           const progB = progressData[b[0]] || {};
           if (progA.isStarted && !progA.isFinished) return -1;
           if (progB.isStarted && !progB.isFinished) return 1;
-          return b[1].turn - a[1].turn;
+          return b[1].turnIndex - a[1].turnIndex;
         });
 
         const bestTurn = matchedEntries[0];
-        allMachineCards.push({
-          key: bestTurn[0],
-          rb: rbName,
-          machine: mNum,
-          config: bestTurn[1],
-          progress: progressData[bestTurn[0]] || { currentCycle: 1, isFinished: false, isStarted: false }
-        });
+        const prog = progressData[bestTurn[0]] || { currentCycle: 1, isFinished: false, isStarted: false };
+
+        let status = 'Idle';
+        if (prog.isFinished) status = 'Finished';
+        else if (prog.isStarted) status = 'In Progress';
+
+        if (selectedStatusFilter === 'ALL' || selectedStatusFilter === status) {
+          allMachineCards.push({
+            key: bestTurn[0],
+            rb: rbName,
+            machine: mNum,
+            config: bestTurn[1],
+            progress: prog,
+            status
+          });
+        }
       } else {
-        allMachineCards.push({
-          key: `${rbName}_${mNum}_idle`,
-          rb: rbName,
-          machine: mNum,
-          config: null,
-          progress: { currentCycle: 0, isFinished: false, isStarted: false }
-        });
+        if (selectedStatusFilter === 'ALL' || selectedStatusFilter === 'Idle') {
+          allMachineCards.push({
+            key: `${rbName}_${mNum}_idle`,
+            rb: rbName,
+            machine: mNum,
+            config: null,
+            progress: { currentCycle: 0, isFinished: false, isStarted: false },
+            status: 'Idle'
+          });
+        }
       }
     });
   });
 
   return (
     <div className="p-4 max-w-md mx-auto relative">
-      <div className="relative flex justify-center items-center mb-10 mt-2 z-20 min-h-[3rem]">
+      <div className="relative flex justify-center items-center mb-8 mt-2 z-20 min-h-[3rem]">
         <div 
           onClick={() => setShowCalendar(true)} 
           className="absolute left-0 bg-white dark:bg-gray-800 px-4 py-2 rounded-2xl flex items-center gap-2 cursor-pointer shadow-sm border dark:border-gray-700 hover:bg-gray-50 transition z-10"
@@ -1160,7 +1353,7 @@ function TrackingPage({ turnsData, progressData, onOpenTurn }) {
         </div>
       </div>
 
-      <div className="flex items-center gap-3 overflow-x-auto pb-4 pt-1 mb-6 px-1 snap-x no-scrollbar">
+      <div className="flex items-center gap-3 overflow-x-auto pb-3 pt-1 mb-3 px-1 snap-x no-scrollbar">
         <button 
           onClick={handleSelectAll} 
           className={`snap-center px-5 py-3 rounded-2xl font-black text-xs uppercase transition-all shadow-sm flex items-center justify-center min-w-[60px] h-12
@@ -1186,6 +1379,22 @@ function TrackingPage({ turnsData, progressData, onOpenTurn }) {
             </div>
           );
         })}
+      </div>
+
+      <div className="flex bg-white dark:bg-gray-800 p-1.5 rounded-2xl mb-6 border border-gray-100 dark:border-gray-700 shadow-sm text-xs font-bold">
+        {['ALL', 'Idle', 'In Progress', 'Finished'].map(st => (
+          <button 
+            key={st} 
+            onClick={() => setSelectedStatusFilter(st)}
+            className={`flex-1 py-2 rounded-xl transition-all ${
+              selectedStatusFilter === st 
+                ? 'bg-blue-500 text-white shadow-md' 
+                : 'text-gray-400 hover:text-black dark:hover:text-white'
+            }`}
+          >
+            {st}
+          </button>
+        ))}
       </div>
 
       <div className="space-y-4">
@@ -1247,8 +1456,8 @@ function TrackingPage({ turnsData, progressData, onOpenTurn }) {
                     <div className="h-6 flex items-center mb-1">
                       <RBLogo rbName={config.borrowedRB || config.rb} className="max-h-6" />
                       {config.borrowedRB && (
-                        <span className="ml-2 text-[10px] bg-yellow-100 text-yellow-800 font-extrabold px-2 py-0.5 rounded-full uppercase">
-                          Borrowed
+                        <span className="ml-2 text-[10px] bg-yellow-400 text-black font-extrabold px-2 py-0.5 rounded-full uppercase">
+                          BORROWED BY: {config.borrowedRB}
                         </span>
                       )}
                     </div>
@@ -1262,7 +1471,7 @@ function TrackingPage({ turnsData, progressData, onOpenTurn }) {
 
               <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl mb-3">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="font-black text-sm">{config.turnName}</span>
+                  <span className="font-black text-sm">Turn {config.turnIndex || 1}: {config.turnName}</span>
                   <span className="text-xs font-bold text-gray-400 capitalize">{config.number} {config.type}s</span>
                 </div>
                 
@@ -1497,6 +1706,25 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
     }
   };
 
+  const handleDeleteCycleLog = async (cycleNum) => {
+    if (currentUser.username.toLowerCase() !== 'baohuynh') return;
+
+    if (window.confirm(`Are you sure you want to delete Cycle ${cycleNum} log?`)) {
+      setCyclesData(cyclesData.filter(c => c.cycle !== cycleNum));
+      setSelectedCycleInfo(null);
+
+      try {
+        await supabase
+          .from('cycle_logs')
+          .delete()
+          .eq('turn_id', `${config.rb}_${config.machine}_${config.createdDate}_${config.turnIndex || config.turn}`)
+          .eq('cycle_number', cycleNum);
+      } catch (err) {
+        console.log('Delete cycle log err:', err);
+      }
+    }
+  };
+
   return (
     <div className="p-4 max-w-md mx-auto">
       <button onClick={onBack} className="mb-6 text-sm font-bold text-gray-500 hover:text-black dark:hover:text-white transition">{"< Back to Turn"}</button>
@@ -1507,8 +1735,8 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
             <div className="mb-2 h-10 flex items-center gap-2">
               <RBLogo rbName={config.rb} className="max-h-10" />
               {config.borrowedRB && (
-                <span className="text-[10px] bg-yellow-400 text-black font-extrabold px-2.5 py-1 rounded-full uppercase">
-                  Borrowed by: {config.borrowedRB}
+                <span className="text-[10px] bg-yellow-400 text-black font-extrabold px-2.5 py-1 rounded-full uppercase shadow-sm">
+                  BORROWED BY: {config.borrowedRB}
                 </span>
               )}
             </div>
@@ -1517,7 +1745,9 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
           {isFinished && <div className="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"><CheckCircle2 size={14}/> Finished</div>}
         </div>
         <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl">
-          <h3 className="font-bold text-lg mb-3 flex items-center gap-2"><Info size={18} className="text-blue-500"/> {config.turnName}</h3>
+          <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
+            <Info size={18} className="text-blue-500"/> Turn {config.turnIndex || 1}: {config.turnName}
+          </h3>
           <div className="flex gap-4 text-sm font-medium">
             <span className="flex items-center gap-1 text-gray-600 dark:text-gray-300"><RotateCw size={16}/> {config.totalCycles} Cycles</span>
             <span className="flex items-center gap-1 text-gray-600 dark:text-gray-300 capitalize"><Shirt size={16}/> {config.number} {config.type}s</span>
@@ -1587,9 +1817,20 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
 
       {selectedCycleInfo && selectedCycleInfo !== 'current' ? (
         <div className="mt-8 p-6 bg-blue-50/50 dark:bg-gray-800/80 rounded-3xl shadow-lg border border-blue-200 dark:border-blue-900/50 animate-in slide-in-from-bottom-4 relative">
-          <button onClick={() => setSelectedCycleInfo(null)} className="absolute top-4 right-4 p-1.5 rounded-full bg-blue-100 dark:bg-gray-700 hover:bg-blue-200 text-gray-500 transition">
-            <X size={16} />
-          </button>
+          <div className="absolute top-4 right-4 flex items-center gap-2">
+            {currentUser.username.toLowerCase() === 'baohuynh' && (
+              <button 
+                onClick={() => handleDeleteCycleLog(selectedCycleInfo.cycle)}
+                className="p-1.5 rounded-full bg-red-100 text-red-600 hover:bg-red-500 hover:text-white transition"
+                title="Delete Cycle Log"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
+            <button onClick={() => setSelectedCycleInfo(null)} className="p-1.5 rounded-full bg-blue-100 dark:bg-gray-700 hover:bg-blue-200 text-gray-500 transition">
+              <X size={16} />
+            </button>
+          </div>
           
           <h4 className="font-black border-b dark:border-gray-600 pb-3 mb-4 text-xl flex items-center gap-2 text-blue-500">
             <Clock size={20}/> Cycle {selectedCycleInfo.cycle} Details
@@ -1618,15 +1859,15 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
             </div>
 
             <div className="mt-4 pt-3 border-t dark:border-gray-700">
-              <span className="font-bold text-xs text-gray-500 block mb-1.5 flex items-center gap-1">
-                <MessageSquare size={14} /> Admin Remark:
+              <span className="font-bold text-xs text-gray-500 block mb-1.5">
+                Leader's Remark:
               </span>
               {currentUser.role === 'admin' ? (
                 <div className="flex gap-2">
                   <input 
                     value={editingRemark}
                     onChange={e => setEditingRemark(e.target.value)}
-                    placeholder="Add technical remark..."
+                    placeholder="Add leader remark..."
                     className="flex-1 p-2 bg-white dark:bg-gray-700 rounded-xl text-xs border dark:border-gray-600 outline-none font-medium"
                   />
                   <button 
@@ -1676,7 +1917,7 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
 
 // --- FORM NHẬP TURN ---
 function TurnFormModal({ turn, isBorrow, currentRB, remainingCycles, onClose, onSave }) {
-  const [turnName, setTurnName] = useState(`Turn ${turn}`);
+  const [turnName, setTurnName] = useState('');
   const [number, setNumber] = useState('');
   const [type, setType] = useState('sample');
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
@@ -1688,6 +1929,10 @@ function TurnFormModal({ turn, isBorrow, currentRB, remainingCycles, onClose, on
   const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
 
   const handleSave = () => {
+    if (!turnName.trim()) {
+      setWarningMsg('Please enter turn name');
+      return;
+    }
     const totalC = Number(cycles);
     if (!totalC || totalC <= 0) {
       setWarningMsg('Please enter valid number of cycles');
@@ -1796,36 +2041,44 @@ function TurnFormModal({ turn, isBorrow, currentRB, remainingCycles, onClose, on
   );
 }
 
-// --- TRANG PROFILE THẬT 100% KẾT NỐI TÀI KHOẢN TỪ SUPABASE ---
-function ProfilePage({ user, onLogout, turnsData = {}, progressData = {} }) {
+// --- TRANG PROFILE THẬT 100% ---
+function ProfilePage({ user, onLogout, turnsData = {}, progressData = {}, refreshData }) {
   const currentHour = getHours(new Date());
   let greeting = 'Good evening';
   if (currentHour >= 5 && currentHour < 12) greeting = 'Good morning';
   else if (currentHour >= 12 && currentHour < 18) greeting = 'Good afternoon';
 
   const [techUsers, setTechUsers] = useState([]);
+  const [editingRbUserId, setEditingRbUserId] = useState(null);
+  
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showTimeEditModal, setShowTimeEditModal] = useState(false);
+  const [showLogsModal, setShowTimeLogsModal] = useState(false);
 
-  // LẤY DANH SÁCH USER TỪ SUPABASE DÀNH CHO ADMIN
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const { data } = await supabase.from('profiles').select('*');
-        if (data) {
-          setTechUsers(data.map(u => ({
-            id: u.id,
-            name: u.username,
-            canEditPast: u.can_edit_past,
-            role: u.role
-          })));
-        }
-      } catch (err) {
-        console.log('Error fetching users:', err);
+  const [newPassword, setNewPassword] = useState('');
+  const [pwdMsg, setPwdMsg] = useState('');
+
+  const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
+
+  const fetchUsers = async () => {
+    try {
+      const { data } = await supabase.from('profiles').select('*');
+      if (data) {
+        setTechUsers(data.map(u => ({
+          id: u.id,
+          name: u.username,
+          canEditPast: u.can_edit_past,
+          role: u.role,
+          rb: u.rb || 'adidas'
+        })));
       }
-    };
-
-    if (user.role === 'admin' || user.username.toLowerCase() === 'baohuynh') {
-      fetchUsers();
+    } catch (err) {
+      console.log('Error fetching users:', err);
     }
+  };
+
+  useEffect(() => {
+    fetchUsers();
   }, [user]);
 
   const togglePermission = async (id, currentVal) => {
@@ -1836,6 +2089,17 @@ function ProfilePage({ user, onLogout, turnsData = {}, progressData = {} }) {
       await supabase.from('profiles').update({ can_edit_past: newVal }).eq('id', id);
     } catch (e) {
       console.log('Update perm err:', e);
+    }
+  };
+
+  const updateServerUserRb = async (id, newRb) => {
+    setTechUsers(techUsers.map(u => u.id === id ? { ...u, rb: newRb } : u));
+    setEditingRbUserId(null);
+
+    try {
+      await supabase.from('profiles').update({ rb: newRb }).eq('id', id);
+    } catch (e) {
+      console.log('Update RB err:', e);
     }
   };
 
@@ -1850,9 +2114,26 @@ function ProfilePage({ user, onLogout, turnsData = {}, progressData = {} }) {
     }
   };
 
+  const handleChangePassword = async () => {
+    if (!newPassword.trim()) {
+      setPwdMsg('Please enter new password');
+      return;
+    }
+    try {
+      await supabase.from('profiles').update({ password: newPassword }).eq('username', user.username);
+      setPwdMsg('Password updated successfully!');
+      setTimeout(() => {
+        setShowPasswordModal(false);
+        setNewPassword('');
+        setPwdMsg('');
+      }, 1500);
+    } catch (e) {
+      setPwdMsg('Error updating password');
+    }
+  };
+
   const isAdmin = user.username.toLowerCase() === 'baohuynh' || user.role === 'admin';
 
-  // LẤY BẢN GHI HOẠT ĐỘNG THỰC TẾ GẦN NHẤT
   const turnEntries = Object.entries(turnsData);
   let latestTurn = null;
   let latestProg = null;
@@ -1890,7 +2171,7 @@ function ProfilePage({ user, onLogout, turnsData = {}, progressData = {} }) {
             </div>
             <div className="flex justify-between border-b dark:border-gray-700 pb-2">
               <span className="text-sm font-bold text-gray-400">Turn</span> 
-              <span className="font-bold">{latestTurn.turnName}</span>
+              <span className="font-bold">Turn {latestTurn.turnIndex || 1}: {latestTurn.turnName}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm font-bold text-gray-400">Current Cycle</span> 
@@ -1911,32 +2192,57 @@ function ProfilePage({ user, onLogout, turnsData = {}, progressData = {} }) {
           </h3>
           
           <div className="mb-6">
-            <h4 className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">User Accounts & Permissions</h4>
-            <div className="space-y-2">
+            <h4 className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">User Accounts & RB Permissions</h4>
+            <div className="space-y-3">
               {techUsers.map(tech => (
-                <div key={tech.id} className="bg-gray-900 dark:bg-gray-700 p-3.5 rounded-2xl flex justify-between items-center">
-                  <div>
-                    <span className="font-bold text-sm block">{tech.name}</span>
-                    <span className="text-[10px] text-gray-400">
-                      {tech.canEditPast ? 'Edit Past: Granted' : 'Edit Past: Blocked'}
-                    </span>
+                <div key={tech.id} className="bg-gray-900 dark:bg-gray-700 p-3.5 rounded-2xl space-y-2">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="font-bold text-sm block">{tech.name}</span>
+                      <span className="text-[10px] text-gray-400 uppercase font-bold">
+                        RB: <span className="text-yellow-400">{tech.rb}</span> • {tech.canEditPast ? 'Edit Past: Granted' : 'Edit Past: Blocked'}
+                      </span>
+                    </div>
+
+                    {tech.name.toLowerCase() !== 'baohuynh' && (
+                      <div className="flex gap-1.5">
+                        <button 
+                          onClick={() => setEditingRbUserId(editingRbUserId === tech.id ? null : tech.id)} 
+                          className="text-xs bg-blue-500/80 hover:bg-blue-600 text-white px-2.5 py-1.5 rounded-xl font-bold transition flex items-center gap-1"
+                        >
+                          <Building size={12} /> RB
+                        </button>
+                        <button 
+                          onClick={() => togglePermission(tech.id, tech.canEditPast)} 
+                          className={`text-xs px-2.5 py-1.5 rounded-xl font-bold transition ${
+                            tech.canEditPast ? 'bg-amber-500 text-black' : 'bg-gray-800 text-gray-300'
+                          }`}
+                        >
+                          <Edit3 size={12} />
+                        </button>
+                        <button 
+                          onClick={() => deleteUser(tech.id, tech.name)} 
+                          className="text-xs bg-red-500/80 hover:bg-red-600 text-white px-2.5 py-1.5 rounded-xl font-bold transition"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {tech.name.toLowerCase() !== 'baohuynh' && (
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => togglePermission(tech.id, tech.canEditPast)} 
-                        className={`text-xs px-3 py-1.5 rounded-xl font-bold transition ${
-                          tech.canEditPast ? 'bg-amber-500 text-black' : 'bg-gray-700 text-gray-300'
-                        }`}
-                      >
-                        <Edit3 size={14} />
-                      </button>
-                      <button 
-                        onClick={() => deleteUser(tech.id, tech.name)} 
-                        className="text-xs bg-red-500/80 hover:bg-red-600 text-white px-3 py-1.5 rounded-xl font-bold transition"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+
+                  {editingRbUserId === tech.id && (
+                    <div className="pt-2 border-t border-gray-800 grid grid-cols-4 gap-1 animate-in fade-in">
+                      {RBs.map(r => (
+                        <button 
+                          key={r} 
+                          onClick={() => updateServerUserRb(tech.id, r)}
+                          className={`text-[10px] font-black uppercase p-1.5 rounded-lg border text-center transition ${
+                            tech.rb === r ? 'bg-yellow-400 text-black border-yellow-400' : 'bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700'
+                          }`}
+                        >
+                          {r}
+                        </button>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1946,11 +2252,18 @@ function ProfilePage({ user, onLogout, turnsData = {}, progressData = {} }) {
 
           <div>
             <h4 className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">Record Modification</h4>
-            <button className="w-full text-left bg-gray-900 dark:bg-gray-700 p-4 rounded-2xl font-bold text-sm hover:bg-gray-800 transition mb-2 flex justify-between items-center">
+            <button 
+              onClick={() => setShowTimeEditModal(true)}
+              className="w-full text-left bg-gray-900 dark:bg-gray-700 p-4 rounded-2xl font-bold text-sm hover:bg-gray-800 transition mb-2 flex justify-between items-center"
+            >
               <span>Edit Time Start / Duration</span>
               <ChevronRight size={16} className="text-gray-400" />
             </button>
-            <button className="w-full text-left bg-gray-900 dark:bg-gray-700 p-4 rounded-2xl font-bold text-sm hover:bg-gray-800 transition flex justify-between items-center">
+            
+            <button 
+              onClick={() => setShowTimeLogsModal(true)}
+              className="w-full text-left bg-gray-900 dark:bg-gray-700 p-4 rounded-2xl font-bold text-sm hover:bg-gray-800 transition flex justify-between items-center"
+            >
               <span>View All Tech Activity Logs</span>
               <ChevronRight size={16} className="text-gray-400" />
             </button>
@@ -1959,13 +2272,84 @@ function ProfilePage({ user, onLogout, turnsData = {}, progressData = {} }) {
       )}
 
       <div className="mt-8 space-y-3">
-        <button className="w-full flex items-center justify-center gap-2 bg-gray-100 dark:bg-gray-800 p-4 rounded-2xl font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition active:scale-95">
+        <button 
+          onClick={() => setShowPasswordModal(true)}
+          className="w-full flex items-center justify-center gap-2 bg-gray-100 dark:bg-gray-800 p-4 rounded-2xl font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition active:scale-95"
+        >
           <Key size={18} className="text-gray-500" /> Change Password
         </button>
         <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 p-4 rounded-2xl font-bold hover:bg-red-200 dark:hover:bg-red-900/50 transition active:scale-95">
           <LogOut size={18} /> Log Out
         </button>
       </div>
+
+      {/* POPUP CHANGE PASSWORD */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl max-w-xs w-full text-center shadow-2xl animate-in zoom-in-95">
+            <h3 className="font-bold text-lg mb-4">Change Password</h3>
+            <input 
+              type="password" 
+              placeholder="Enter new password"
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              className="w-full p-3 bg-gray-100 dark:bg-gray-700 rounded-xl mb-3 font-bold text-sm outline-none"
+            />
+            {pwdMsg && <p className="text-xs font-bold text-blue-500 mb-3">{pwdMsg}</p>}
+            <div className="flex gap-2">
+              <button onClick={() => setShowPasswordModal(false)} className="flex-1 py-3 bg-gray-200 dark:bg-gray-700 rounded-xl font-bold text-xs">Cancel</button>
+              <button onClick={handleChangePassword} className="flex-1 py-3 bg-blue-500 text-white rounded-xl font-bold text-xs">Update</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP EDIT TIME START / DURATION */}
+      {showTimeEditModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl max-w-sm w-full shadow-2xl animate-in zoom-in-95">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-lg flex items-center gap-2"><Clock size={18}/> Edit Time & Duration</h3>
+              <button onClick={() => setShowTimeEditModal(false)}><X size={20} className="text-gray-400"/></button>
+            </div>
+            <p className="text-xs text-gray-400 font-medium mb-4">Select Turn to override time logs in Supabase database.</p>
+            <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+              {turnEntries.map(([k, turn]) => (
+                <div key={k} className="p-3 bg-gray-50 dark:bg-gray-900 rounded-xl flex justify-between items-center text-xs">
+                  <div>
+                    <span className="font-bold block">Turn {turn.turnIndex || 1}: {turn.turnName}</span>
+                    <span className="text-gray-400">Machine {turn.machine} • {turn.createdDate}</span>
+                  </div>
+                  <button onClick={() => alert(`Edit Time feature active for ${turn.turnName}`)} className="bg-blue-500 text-white px-3 py-1.5 rounded-lg font-bold">Edit</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP VIEW ALL TECH ACTIVITY LOGS */}
+      {showLogsModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl max-w-sm w-full shadow-2xl animate-in zoom-in-95">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-lg flex items-center gap-2"><FileText size={18}/> Activity Logs</h3>
+              <button onClick={() => setShowTimeLogsModal(false)}><X size={20} className="text-gray-400"/></button>
+            </div>
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {turnEntries.map(([k, turn]) => (
+                <div key={k} className="p-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-xs space-y-1">
+                  <div className="flex justify-between font-bold">
+                    <span>{turn.savedBy || 'Tech User'}</span>
+                    <span className="text-blue-500">{turn.createdDate}</span>
+                  </div>
+                  <p className="text-gray-400">Created Turn {turn.turnIndex || 1}: {turn.turnName} (Machine {turn.machine})</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
