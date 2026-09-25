@@ -33,7 +33,7 @@ export default function App() {
   return <MainLayout currentUser={currentUser} theme={theme} onLogout={() => setCurrentUser(null)} />;
 }
 
-// --- MÀN HÌNH ĐĂNG NHẬP & ĐĂNG KÝ CHUẨN XỬ LÝ LỖI SUPABASE ---
+// --- MÀN HÌNH ĐĂNG NHẬP & ĐĂNG KÝ BẮT LỖI SUPABASE THỰC TẾ ---
 function AuthScreen({ onLogin }) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
@@ -45,6 +45,10 @@ function AuthScreen({ onLogin }) {
   
   const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
 
+  useEffect(() => {
+    document.title = "lab. GPBAO";
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
@@ -55,15 +59,16 @@ function AuthScreen({ onLogin }) {
     }
 
     const lowerUser = username.toLowerCase().trim();
-    setLoading(true);
-
     const role = lowerUser === 'baohuynh' ? 'admin' : 'user';
     const selectedRB = rb || 'adidas';
+    const userPwd = password || '123456';
+
+    setLoading(true);
 
     if (isLogin) {
-      // DANG NHAP
+      // ĐĂNG NHẬP
       try {
-        const { data: userProfile } = await supabase
+        const { data: userProfile, error } = await supabase
           .from('profiles')
           .select('*')
           .eq('username', lowerUser)
@@ -77,18 +82,16 @@ function AuthScreen({ onLogin }) {
             canEditPast: userProfile.can_edit_past || role === 'admin'
           });
         } else {
-          // Nếu đăng nhập bằng user chưa tồn tại -> Tự tạo và đăng nhập
-          const newUser = { username: lowerUser, role, rb: selectedRB, canEditPast: role === 'admin' };
-          await supabase.from('profiles').upsert([{ username: lowerUser, role, rb: selectedRB, can_edit_past: role === 'admin' }]);
-          onLogin(newUser);
+          setErrorMsg('Account does not exist! Please Sign up.');
         }
       } catch (err) {
-        onLogin({ username: lowerUser, role, rb: selectedRB, canEditPast: role === 'admin' });
+        console.error('Login error:', err);
+        setErrorMsg('Login connection failed.');
       } finally {
         setLoading(false);
       }
     } else {
-      // DANG KY (SIGN UP)
+      // ĐĂNG KÝ (SIGN UP)
       if (!rb) {
         setErrorMsg('Please select your RB brand');
         setLoading(false);
@@ -96,27 +99,46 @@ function AuthScreen({ onLogin }) {
       }
 
       try {
-        const newUser = { username: lowerUser, role, rb: selectedRB, canEditPast: role === 'admin' };
-        
-        // Dùng upsert thay cho insert để tránh bị kẹt Duplicate Key
-        const { error } = await supabase.from('profiles').upsert([
-          { 
-            username: lowerUser, 
-            role: role, 
-            rb: selectedRB, 
-            can_edit_past: role === 'admin',
-            password: password || '123456'
-          }
-        ]);
+        // 1. Kiểm tra username đã tồn tại chưa
+        const { data: existingUser } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('username', lowerUser)
+          .maybeSingle();
 
-        if (error) {
-          console.log('Supabase signup detail error:', error);
+        if (existingUser) {
+          setErrorMsg('Username already exists! Choose another name.');
+          setLoading(false);
+          return;
         }
 
-        // Vào app ngay lập tức sau khi đăng ký
-        onLogin(newUser);
-      } catch (err) {
+        // 2. Insert tài khoản mới vào Supabase
+        const { data: newProfile, error: insertError } = await supabase
+          .from('profiles')
+          .insert([
+            { 
+              username: lowerUser, 
+              password: userPwd,
+              role: role, 
+              rb: selectedRB, 
+              can_edit_past: role === 'admin'
+            }
+          ])
+          .select();
+
+        // NẾU LỖI, IN THẲNG LỖI CỦA SUPABASE RA MÀN HÌNH ĐỂ BẮT ĐÚNG BỆNH!
+        if (insertError) {
+          console.error('Database Insert Error:', insertError);
+          setErrorMsg(`Lỗi Supabase: ${insertError.message || insertError.details || 'Unknown Error'}`);
+          setLoading(false);
+          return;
+        }
+
+        // 3. Đã lưu Supabase thành công 100% -> Vào App
         onLogin({ username: lowerUser, role, rb: selectedRB, canEditPast: role === 'admin' });
+      } catch (err) {
+        console.error('Sign up Exception:', err);
+        setErrorMsg(`Lỗi kết nối: ${err.message}`);
       } finally {
         setLoading(false);
       }
