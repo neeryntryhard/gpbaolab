@@ -14,16 +14,31 @@ export default function App() {
   const [theme, setTheme] = useState('light');
 
   useEffect(() => {
+    // FIX MOBILE BROWSER (XÓA VỆT TRẮNG TRÊN/DƯỚI): Tự động cấu hình theme-color cho thanh trạng thái
+    let metaThemeColor = document.querySelector("meta[name=theme-color]");
+    if (!metaThemeColor) {
+      metaThemeColor = document.createElement("meta");
+      metaThemeColor.name = "theme-color";
+      document.head.appendChild(metaThemeColor);
+    }
+
     const checkTheme = () => {
       const currentHour = getHours(new Date());
       if (currentHour >= 6 && currentHour < 18) {
         setTheme('light');
         document.documentElement.classList.remove('dark');
+        // Ép màu nền gốc của thẻ body trình duyệt
+        document.body.style.backgroundColor = '#f9fafb'; 
+        metaThemeColor.setAttribute("content", "#f9fafb");
       } else {
         setTheme('dark');
         document.documentElement.classList.add('dark');
+        // Ép màu nền gốc của thẻ body trình duyệt thành Dark Mode
+        document.body.style.backgroundColor = '#111827'; 
+        metaThemeColor.setAttribute("content", "#111827");
       }
     };
+    
     checkTheme();
     const interval = setInterval(checkTheme, 60000); 
     return () => clearInterval(interval);
@@ -187,7 +202,7 @@ function AuthScreen({ onLogin }) {
   );
 }
 
-// --- GIAO DIỆN CHÍNH & BOTTOM NAV (CÓ LỚP PHỦ FULL MÀU ĐIỆN THOẠI) ---
+// --- GIAO DIỆN CHÍNH & BOTTOM NAV ---
 function MainLayout({ currentUser, onLogout }) {
   const [activeTab, setActiveTab] = useState('washing');
   const [resetWashingTrigger, setResetWashingTrigger] = useState(0);
@@ -262,9 +277,7 @@ function MainLayout({ currentUser, onLogout }) {
   };
 
   return (
-    <div className="min-h-screen pb-28 text-black dark:text-white font-sans transition-colors relative">
-      {/* KHÓA MÀU NỀN CỐ ĐỊNH PHỦ TOÀN BỘ TRÊN VÀ DƯỚI TRÁNH VỆT TRẮNG TRÊN MOBILE */}
-      <div className="fixed inset-0 -z-10 bg-gray-50 dark:bg-gray-900 pointer-events-none"></div>
+    <div className="min-h-screen pb-28 text-black dark:text-white font-sans transition-colors relative bg-gray-50 dark:bg-gray-900">
 
       <div className={activeTab === 'washing' ? 'block' : 'hidden'}>
         <WashingPage 
@@ -410,14 +423,6 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
 
     setActiveRunnerId(turnId);
     setViewMode('runner');
-  };
-
-  const updateTurnProgress = async (turnId, currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj) => {
-    const updated = {
-      ...turnProgress,
-      [turnId]: { currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj }
-    };
-    onProgressChange(updated);
   };
 
   const handleDeleteTurn = async (e, turnKey) => {
@@ -1298,7 +1303,7 @@ function DashboardPage({ turnsData, progressData }) {
   );
 }
 
-// --- TRANG TRACKING (ĐÃ SỬA CHUẨN TIÊU ĐỀ WASHING / MACHINE TRACKING XUỐNG DÒNG) ---
+// --- TRANG TRACKING ---
 function TrackingPage({ turnsData, progressData, onOpenTurn }) {
   const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
   
@@ -1393,7 +1398,6 @@ function TrackingPage({ turnsData, progressData, onOpenTurn }) {
           <span className="font-bold text-sm">{date}</span>
         </div>
         
-        {/* TIÊU ĐỀ WASHING (XUỐNG HÀNG) MACHINE TRACKING BÌNH THƯỜNG CĂN GIỮA */}
         <div className="text-center pointer-events-none z-0">
           <h2 className="font-black text-xl leading-tight">Washing<br/>Machine Tracking</h2>
         </div>
