@@ -234,7 +234,8 @@ function MainLayout({ currentUser, onLogout }) {
               isStarted: !!l.who_started,
               lastEndedTime: l.end_time ? format(new Date(l.end_time), 'dd-MMM, HH:mm') : null,
               lastSavedBy: l.who_ended || l.who_started,
-              remarksObj: { [cycleNum]: l.admin_remark }
+              remarksObj: { [cycleNum]: l.admin_remark },
+              durationMinutes: l.duration_minutes || 0
             };
           }
         });
@@ -878,7 +879,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
   );
 }
 
-// --- TRANG DASHBOARD ---
+// --- TRANG DASHBOARD (TỰ ĐỘNG HIỂN THỊ TẤT CẢ CÁC MÁY CÓ TRONG DỮ LIỆU & TÍNH CHUẨN DURATION) ---
 function DashboardPage({ turnsData, progressData }) {
   const [filterPeriod, setFilterPeriod] = useState('Week');
   const [selectedMachineRBFilter, setSelectedMachineRBFilter] = useState('ALL');
@@ -890,7 +891,14 @@ function DashboardPage({ turnsData, progressData }) {
   const [selectedDaysList, setSelectedDaysList] = useState([format(new Date(), 'dd-MMM')]);
 
   const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
-  const machinesList = [11, 12, 13, 14, 15];
+
+  // QUÉT DỮ LIỆU TRONG TURNS VÀ LẤY DỌC DÂN TẤT CẢ CÁC MÁY ĐANG CÓ (DỰA VÀO MACHINE_NUMBER)
+  const detectedMachines = Array.from(
+    new Set(Object.values(turnsData).map(t => t.machine).filter(Boolean))
+  ).sort((a, b) => a - b);
+
+  // NẾU DATABASE CHƯA CÓ MÁY NÀO THÌ MẶC ĐỊNH MÁY 11 -> 15
+  const activeMachinesList = detectedMachines.length > 0 ? detectedMachines : [11, 12, 13, 14, 15];
 
   const defaultMachineOwners = {
     11: 'puma',
@@ -961,7 +969,7 @@ function DashboardPage({ turnsData, progressData }) {
         } else if (prog?.isStarted) {
           totalCycles += Number(prog.currentCycle || 1);
         }
-        totalDurationMins += Number(config.totalCycles || 1) * 60;
+        totalDurationMins += Number(prog?.durationMinutes || (config.totalCycles || 1) * 60);
       }
     });
 
@@ -973,7 +981,7 @@ function DashboardPage({ turnsData, progressData }) {
     };
   });
 
-  const machineStats = machinesList.map(mNum => {
+  const machineStats = activeMachinesList.map(mNum => {
     let totalCycles = 0;
     let totalTurns = 0;
     let totalDurationMins = 0;
@@ -991,7 +999,7 @@ function DashboardPage({ turnsData, progressData }) {
           } else if (prog?.isStarted) {
             totalCycles += Number(prog.currentCycle || 1);
           }
-          totalDurationMins += Number(config.totalCycles || 1) * 60;
+          totalDurationMins += Number(prog?.durationMinutes || (config.totalCycles || 1) * 60);
         }
       }
     });
@@ -1130,7 +1138,7 @@ function DashboardPage({ turnsData, progressData }) {
         </div>
       </div>
 
-      {/* 3. MACHINE METRICS */}
+      {/* 3. MACHINE METRICS (HIỂN THỊ ĐẦY ĐỦ TOÀN BỘ CÁC MÁY CO TRONG HỆ THỐNG) */}
       <div className="bg-gray-900 text-white p-6 rounded-3xl shadow-xl border border-gray-800 mb-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-black text-base flex items-center gap-2">
@@ -1168,9 +1176,9 @@ function DashboardPage({ turnsData, progressData }) {
         </div>
 
         <div className="overflow-x-auto pb-4 custom-scrollbar">
-          <div className="flex items-end gap-6 min-w-[400px] h-48 px-2 pt-6 border-b border-gray-800">
+          <div className="flex items-end gap-6 min-w-[350px] h-48 px-2 pt-6 border-b border-gray-800">
             {machineStats.map(item => (
-              <div key={item.machine} className="flex-1 flex flex-col items-center justify-end h-full">
+              <div key={item.machine} className="flex-1 flex flex-col items-center justify-end h-full min-w-[50px]">
                 <div className="flex items-end gap-1.5 w-full justify-center h-36">
                   <div className="flex flex-col items-center flex-1 max-w-[16px] h-full justify-end">
                     <span className="text-[9px] font-black text-blue-400 mb-1">{item.totalCycles}</span>
@@ -1289,10 +1297,15 @@ function DashboardPage({ turnsData, progressData }) {
   );
 }
 
-// --- TRANG TRACKING ---
+// --- TRANG TRACKING (TÊN TIÊU ĐỀ MACHINE TRACKING 1 DÒNG ĐẸP CHUẨN GIAO DIỆN DI ĐỘNG) ---
 function TrackingPage({ turnsData, progressData, onOpenTurn }) {
   const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
-  const machinesList = [11, 12, 13, 14, 15];
+  
+  // LẤY ĐẦY ĐỦ DANH SÁCH MÁY
+  const detectedMachines = Array.from(
+    new Set(Object.values(turnsData).map(t => t.machine).filter(Boolean))
+  ).sort((a, b) => a - b);
+  const machinesList = detectedMachines.length > 0 ? detectedMachines : [11, 12, 13, 14, 15];
   
   const [selectedRBs, setSelectedRBs] = useState([]); 
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL');
@@ -1381,7 +1394,7 @@ function TrackingPage({ turnsData, progressData, onOpenTurn }) {
         </div>
         
         <div className="text-center pointer-events-none z-0">
-          <h2 className="font-black text-xl leading-tight">Washing Machine<br/>Tracking</h2>
+          <h2 className="font-black text-xl whitespace-nowrap">Machine Tracking</h2>
         </div>
         
         <div className="absolute right-0 bg-white dark:bg-gray-800 px-4 py-2 rounded-2xl flex items-center gap-2 shadow-sm border dark:border-gray-700 z-10">
@@ -1641,7 +1654,7 @@ function CalendarModal({ currentDate, onClose, onSelect }) {
   );
 }
 
-// --- TRANG CHẠY CYCLES (GHI TRỰC TIẾP GIỜ START/DONE VÀO SUPABASE) ---
+// --- TRANG CHẠY CYCLES ---
 function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, onProgressUpdate }) {
   const [currentCycle, setCurrentCycle] = useState(1);
   const [startTime, setStartTime] = useState(null);
@@ -1663,7 +1676,6 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
 
   const turnIdKey = `${config.rb}_${config.machine}_${config.createdDate}_${config.turnIndex || config.turn}`;
 
-  // TẢI LOGS DỮ LIỆU CYCLES CHI TIẾT TỪ SUPABASE
   const fetchCyclesFromSupabase = async () => {
     try {
       const { data: logs } = await supabase
@@ -1776,7 +1788,6 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
     } catch (e) {}
   };
 
-  // THAO TÁC START BẤM: GHI VÀO SUPABASE NGAY
   const handleStart = async () => {
     if(isFinished || !canEditOrAdd) return;
     playBeep(800, 0.1); 
@@ -1799,7 +1810,6 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
     }
   };
 
-  // THAO TÁC DONE BẤM: GHI HOÀN TẤT VÀO SUPABASE NGAY
   const handleDone = async () => {
     if (!startTime || isFinished || !canEditOrAdd) return;
     const now = new Date();
@@ -1855,8 +1865,27 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
       console.log('Done log save err:', e);
     }
     
-    if (currentCycle <= config.totalCycles) {
-      setCurrentCycle(prev => prev + 1);
+    const nextCycle = currentCycle + 1;
+    if (nextCycle <= config.totalCycles) {
+      setCurrentCycle(nextCycle);
+      setStartTime(now);
+      setStartedBy(currentUser.username);
+
+      try {
+        await supabase.from('cycle_logs').upsert([
+          {
+            turn_id: turnIdKey,
+            cycle_number: nextCycle,
+            start_time: now.toISOString(),
+            who_started: currentUser.username,
+            record_date: currentDate || format(new Date(), 'dd-MMM')
+          }
+        ]);
+      } catch (e) {
+        console.log('Auto-start next cycle log err:', e);
+      }
+    } else {
+      setCurrentCycle(nextCycle);
       setStartTime(null);
       setStartedBy(null);
     }
