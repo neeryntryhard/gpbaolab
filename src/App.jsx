@@ -187,7 +187,7 @@ function AuthScreen({ onLogin }) {
   );
 }
 
-// --- GIAO DIỆN CHÍNH & BOTTOM NAV ---
+// --- GIAO DIỆN CHÍNH & BOTTOM NAV (CÓ LỚP PHỦ FULL MÀU ĐIỆN THOẠI) ---
 function MainLayout({ currentUser, onLogout }) {
   const [activeTab, setActiveTab] = useState('washing');
   const [resetWashingTrigger, setResetWashingTrigger] = useState(0);
@@ -262,7 +262,10 @@ function MainLayout({ currentUser, onLogout }) {
   };
 
   return (
-    <div className="min-h-screen pb-28 bg-gray-50 dark:bg-gray-900 text-black dark:text-white font-sans transition-colors relative">
+    <div className="min-h-screen pb-28 text-black dark:text-white font-sans transition-colors relative">
+      {/* KHÓA MÀU NỀN CỐ ĐỊNH PHỦ TOÀN BỘ TRÊN VÀ DƯỚI TRÁNH VỆT TRẮNG TRÊN MOBILE */}
+      <div className="fixed inset-0 -z-10 bg-gray-50 dark:bg-gray-900 pointer-events-none"></div>
+
       <div className={activeTab === 'washing' ? 'block' : 'hidden'}>
         <WashingPage 
           currentUser={currentUser} 
@@ -879,7 +882,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
   );
 }
 
-// --- TRANG DASHBOARD (TỰ ĐỘNG HIỂN THỊ TẤT CẢ CÁC MÁY CÓ TRONG DỮ LIỆU & TÍNH CHUẨN DURATION) ---
+// --- TRANG DASHBOARD ---
 function DashboardPage({ turnsData, progressData }) {
   const [filterPeriod, setFilterPeriod] = useState('Week');
   const [selectedMachineRBFilter, setSelectedMachineRBFilter] = useState('ALL');
@@ -892,12 +895,10 @@ function DashboardPage({ turnsData, progressData }) {
 
   const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
 
-  // QUÉT DỮ LIỆU TRONG TURNS VÀ LẤY DỌC DÂN TẤT CẢ CÁC MÁY ĐANG CÓ (DỰA VÀO MACHINE_NUMBER)
   const detectedMachines = Array.from(
     new Set(Object.values(turnsData).map(t => t.machine).filter(Boolean))
   ).sort((a, b) => a - b);
 
-  // NẾU DATABASE CHƯA CÓ MÁY NÀO THÌ MẶC ĐỊNH MÁY 11 -> 15
   const activeMachinesList = detectedMachines.length > 0 ? detectedMachines : [11, 12, 13, 14, 15];
 
   const defaultMachineOwners = {
@@ -1138,7 +1139,7 @@ function DashboardPage({ turnsData, progressData }) {
         </div>
       </div>
 
-      {/* 3. MACHINE METRICS (HIỂN THỊ ĐẦY ĐỦ TOÀN BỘ CÁC MÁY CO TRONG HỆ THỐNG) */}
+      {/* 3. MACHINE METRICS */}
       <div className="bg-gray-900 text-white p-6 rounded-3xl shadow-xl border border-gray-800 mb-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-black text-base flex items-center gap-2">
@@ -1297,11 +1298,10 @@ function DashboardPage({ turnsData, progressData }) {
   );
 }
 
-// --- TRANG TRACKING (TÊN TIÊU ĐỀ MACHINE TRACKING 1 DÒNG ĐẸP CHUẨN GIAO DIỆN DI ĐỘNG) ---
+// --- TRANG TRACKING (ĐÃ SỬA CHUẨN TIÊU ĐỀ WASHING / MACHINE TRACKING XUỐNG DÒNG) ---
 function TrackingPage({ turnsData, progressData, onOpenTurn }) {
   const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
   
-  // LẤY ĐẦY ĐỦ DANH SÁCH MÁY
   const detectedMachines = Array.from(
     new Set(Object.values(turnsData).map(t => t.machine).filter(Boolean))
   ).sort((a, b) => a - b);
@@ -1393,8 +1393,9 @@ function TrackingPage({ turnsData, progressData, onOpenTurn }) {
           <span className="font-bold text-sm">{date}</span>
         </div>
         
+        {/* TIÊU ĐỀ WASHING (XUỐNG HÀNG) MACHINE TRACKING BÌNH THƯỜNG CĂN GIỮA */}
         <div className="text-center pointer-events-none z-0">
-          <h2 className="font-black text-xl whitespace-nowrap">Machine Tracking</h2>
+          <h2 className="font-black text-xl leading-tight">Washing<br/>Machine Tracking</h2>
         </div>
         
         <div className="absolute right-0 bg-white dark:bg-gray-800 px-4 py-2 rounded-2xl flex items-center gap-2 shadow-sm border dark:border-gray-700 z-10">
