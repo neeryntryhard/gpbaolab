@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { WashingMachine, BarChart3, User, Calendar as CalendarIcon, AlertTriangle, X, ChevronDown, Plus, CheckCircle2, Info, Shirt, RotateCw, Clock, LogOut, Key, Target, ChevronLeft, ChevronRight, ShieldCheck, Trash2, Edit3, Repeat, MessageSquare, Filter, Building, FileText, Check } from 'lucide-react';
+import { WashingMachine, BarChart3, User, Calendar as CalendarIcon, AlertTriangle, X, ChevronDown, Plus, CheckCircle2, Info, Shirt, RotateCw, Clock, LogOut, Key, Target, ChevronLeft, ChevronRight, ShieldCheck, Trash2, Edit3, Repeat, MessageSquare, Filter, Building, FileText, Check, Save } from 'lucide-react';
 import { format, differenceInMinutes, getHours, addDays, startOfWeek, endOfWeek, parse, isSameDay, isBefore, startOfDay } from 'date-fns';
 import { createClient } from '@supabase/supabase-js';
 
@@ -33,7 +33,7 @@ export default function App() {
   return <MainLayout currentUser={currentUser} theme={theme} onLogout={() => setCurrentUser(null)} />;
 }
 
-// --- MÀN HÌNH ĐĂNG NHẬP & ĐĂNG KÝ BẮT LỖI SUPABASE THỰC TẾ ---
+// --- MÀN HÌNH ĐĂNG NHẬP & ĐĂNG KÝ THẬT 100% ---
 function AuthScreen({ onLogin }) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
@@ -66,9 +66,8 @@ function AuthScreen({ onLogin }) {
     setLoading(true);
 
     if (isLogin) {
-      // ĐĂNG NHẬP
       try {
-        const { data: userProfile, error } = await supabase
+        const { data: userProfile } = await supabase
           .from('profiles')
           .select('*')
           .eq('username', lowerUser)
@@ -91,7 +90,6 @@ function AuthScreen({ onLogin }) {
         setLoading(false);
       }
     } else {
-      // ĐĂNG KÝ (SIGN UP)
       if (!rb) {
         setErrorMsg('Please select your RB brand');
         setLoading(false);
@@ -99,7 +97,6 @@ function AuthScreen({ onLogin }) {
       }
 
       try {
-        // 1. Kiểm tra username đã tồn tại chưa
         const { data: existingUser } = await supabase
           .from('profiles')
           .select('username')
@@ -112,8 +109,7 @@ function AuthScreen({ onLogin }) {
           return;
         }
 
-        // 2. Insert tài khoản mới vào Supabase
-        const { data: newProfile, error: insertError } = await supabase
+        const { error: insertError } = await supabase
           .from('profiles')
           .insert([
             { 
@@ -123,18 +119,15 @@ function AuthScreen({ onLogin }) {
               rb: selectedRB, 
               can_edit_past: role === 'admin'
             }
-          ])
-          .select();
+          ]);
 
-        // NẾU LỖI, IN THẲNG LỖI CỦA SUPABASE RA MÀN HÌNH ĐỂ BẮT ĐÚNG BỆNH!
         if (insertError) {
           console.error('Database Insert Error:', insertError);
-          setErrorMsg(`Lỗi Supabase: ${insertError.message || insertError.details || 'Unknown Error'}`);
+          setErrorMsg(`Lỗi Supabase: ${insertError.message || 'Unknown Error'}`);
           setLoading(false);
           return;
         }
 
-        // 3. Đã lưu Supabase thành công 100% -> Vào App
         onLogin({ username: lowerUser, role, rb: selectedRB, canEditPast: role === 'admin' });
       } catch (err) {
         console.error('Sign up Exception:', err);
@@ -206,8 +199,8 @@ function MainLayout({ currentUser, onLogout }) {
   const fetchSupabaseData = async () => {
     try {
       const { data: turns } = await supabase.from('turns').select('*');
+      let loadedTurns = {};
       if (turns && turns.length > 0) {
-        const loadedTurns = {};
         turns.forEach(t => {
           loadedTurns[t.id] = {
             turnName: t.turn_name,
@@ -230,14 +223,20 @@ function MainLayout({ currentUser, onLogout }) {
       if (logs && logs.length > 0) {
         const loadedProg = {};
         logs.forEach(l => {
-          loadedProg[l.turn_id] = {
-            currentCycle: l.cycle_number,
-            isFinished: l.cycle_number >= (globalTurnsData[l.turn_id]?.totalCycles || 1),
-            isStarted: true,
-            lastEndedTime: l.end_time ? format(new Date(l.end_time), 'dd-MMM, HH:mm') : null,
-            lastSavedBy: l.who_ended || l.who_started,
-            remarksObj: { [l.cycle_number]: l.admin_remark }
-          };
+          const targetTurn = loadedTurns[l.turn_id] || globalTurnsData[l.turn_id];
+          const totalC = targetTurn ? targetTurn.totalCycles : 1;
+          const cycleNum = l.cycle_number || 1;
+          
+          if (!loadedProg[l.turn_id] || cycleNum >= loadedProg[l.turn_id].currentCycle) {
+            loadedProg[l.turn_id] = {
+              currentCycle: cycleNum,
+              isFinished: !!l.who_ended && cycleNum >= totalC,
+              isStarted: !!l.who_started,
+              lastEndedTime: l.end_time ? format(new Date(l.end_time), 'dd-MMM, HH:mm') : null,
+              lastSavedBy: l.who_ended || l.who_started,
+              remarksObj: { [cycleNum]: l.admin_remark }
+            };
+          }
         });
         setGlobalProgressData(prev => ({ ...prev, ...loadedProg }));
       }
@@ -262,7 +261,7 @@ function MainLayout({ currentUser, onLogout }) {
   };
 
   return (
-    <div className="min-h-screen pb-24 bg-gray-50 dark:bg-gray-900 text-black dark:text-white font-sans transition-colors relative">
+    <div className="min-h-screen pb-28 bg-gray-50 dark:bg-gray-900 text-black dark:text-white font-sans transition-colors relative">
       <div className={activeTab === 'washing' ? 'block' : 'hidden'}>
         <WashingPage 
           currentUser={currentUser} 
@@ -298,32 +297,32 @@ function MainLayout({ currentUser, onLogout }) {
         />
       </div>
 
-      <div className="fixed bottom-0 w-full max-w-md mx-auto inset-x-0 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md border-t dark:border-gray-700 flex justify-around p-4 rounded-t-3xl z-40">
-        <button onClick={handleWashingClick} className={`flex flex-col items-center transition ${activeTab === 'washing' ? 'text-black dark:text-white scale-110' : 'text-gray-400'}`}>
-          <WashingMachine size={24} />
-          <span className="text-[10px] font-bold mt-1">Washing</span>
+      <div className="fixed bottom-0 w-full max-w-md mx-auto inset-x-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-lg border-t dark:border-gray-700 flex justify-around p-3 rounded-t-3xl z-40 pb-safe">
+        <button onClick={handleWashingClick} className={`flex flex-col items-center transition ${activeTab === 'washing' ? 'text-black dark:text-white scale-105 font-bold' : 'text-gray-400'}`}>
+          <WashingMachine size={22} />
+          <span className="text-[10px] mt-1">Washing</span>
         </button>
 
-        <button onClick={() => setActiveTab('tracking')} className={`flex flex-col items-center transition ${activeTab === 'tracking' ? 'text-black dark:text-white scale-110' : 'text-gray-400'}`}>
-          <Target size={24} />
-          <span className="text-[10px] font-bold mt-1">Tracking</span>
+        <button onClick={() => setActiveTab('tracking')} className={`flex flex-col items-center transition ${activeTab === 'tracking' ? 'text-black dark:text-white scale-105 font-bold' : 'text-gray-400'}`}>
+          <Target size={22} />
+          <span className="text-[10px] mt-1">Tracking</span>
         </button>
 
-        <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center transition ${activeTab === 'dashboard' ? 'text-black dark:text-white scale-110' : 'text-gray-400'}`}>
-          <BarChart3 size={24} />
-          <span className="text-[10px] font-bold mt-1">Dashboard</span>
+        <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center transition ${activeTab === 'dashboard' ? 'text-black dark:text-white scale-105 font-bold' : 'text-gray-400'}`}>
+          <BarChart3 size={22} />
+          <span className="text-[10px] mt-1">Dashboard</span>
         </button>
 
-        <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center transition ${activeTab === 'profile' ? 'text-black dark:text-white scale-110' : 'text-gray-400'}`}>
-          <User size={24} />
-          <span className="text-[10px] font-bold mt-1">Profile</span>
+        <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center transition ${activeTab === 'profile' ? 'text-black dark:text-white scale-105 font-bold' : 'text-gray-400'}`}>
+          <User size={22} />
+          <span className="text-[10px] mt-1">Profile</span>
         </button>
       </div>
     </div>
   );
 }
 
-// --- TRANG WASHING VÀ QUẢN LÝ TIẾN TRÌNH ---
+// --- TRANG WASHING ---
 function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turnProgress, onTurnsChange, onProgressChange, refreshData }) {
   const [time, setTime] = useState(format(new Date(), 'HH:mm'));
   const [date, setDate] = useState(format(new Date(), 'dd-MMM'));
@@ -415,21 +414,6 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
       [turnId]: { currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj }
     };
     onProgressChange(updated);
-
-    try {
-      await supabase.from('cycle_logs').upsert([
-        {
-          turn_id: turnId,
-          cycle_number: currentCycle,
-          who_started: isStarted ? lastSavedBy : null,
-          who_ended: isFinished ? lastSavedBy : null,
-          admin_remark: remarksObj ? remarksObj[currentCycle] : null,
-          record_date: selectedDayDate
-        }
-      ]);
-    } catch (e) {
-      console.log('Supabase cycle_logs update err:', e);
-    }
   };
 
   const handleDeleteTurn = async (e, turnKey) => {
@@ -536,7 +520,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
   return (
     <div className="w-full">
       <div className={viewMode === 'setup' ? 'block p-4 max-w-md mx-auto relative' : 'hidden'}>
-        <div className="relative flex justify-center items-center mb-10 mt-2 z-20 min-h-[3rem]">
+        <div className="relative flex justify-center items-center mb-8 mt-2 z-20 min-h-[3rem]">
           <div onClick={() => setShowCalendar(true)} className="absolute left-0 bg-white dark:bg-gray-800 px-4 py-2 rounded-2xl flex items-center gap-2 cursor-pointer shadow-sm border dark:border-gray-700 hover:bg-gray-50 transition z-10">
             <CalendarIcon size={16} />
             <span className="font-bold text-sm">{date}</span>
@@ -550,8 +534,8 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
         </div>
 
         {!selectedRB ? (
-          <div className="mt-8">
-             <div className="flex justify-center mb-6">
+          <div className="mt-6">
+             <div className="flex justify-center mb-5">
                <div className="relative flex items-center justify-center">
                  <div className="absolute inset-0 bg-blue-400 dark:bg-blue-600 rounded-full animate-[ping_3s_ease-in-out_infinite] opacity-20"></div>
                  <div className="relative p-5 bg-blue-100 dark:bg-blue-900/40 rounded-full shadow-inner z-10">
@@ -573,26 +557,43 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
              </div>
           </div>
         ) : !selectedMachine ? (
-          <div className="mt-8 animate-in fade-in slide-in-from-right-4">
+          <div className="mt-6 animate-in fade-in slide-in-from-right-4">
             <button onClick={() => setSelectedRB(null)} className="mb-4 text-sm font-bold text-gray-500 hover:text-black dark:hover:text-white transition">{"< Back to RB"}</button>
             <div className="flex flex-col items-center justify-center mb-6">
               <RBLogo rbName={selectedRB} className="max-h-12 mb-2" />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              {machines.map(num => (
-                <div key={num} onClick={() => handleSelectMachine(num)} 
-                     className={`relative bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-100 dark:border-gray-700/50 flex flex-col items-center justify-center cursor-pointer shadow-md hover:ring-2 ring-blue-400 transition active:scale-95 overflow-hidden ${
-                       rippleMachine === num ? 'ring-2 ring-blue-500' : ''
-                     }`}>
-                  {rippleMachine === num && <span className="absolute inset-0 rounded-3xl bg-blue-400/20 dark:bg-blue-500/30 animate-[ping_0.3s_ease-out_1]"></span>}
-                  <WashingMachine size={40} className="mb-2 text-blue-500 relative z-10" strokeWidth={1.5} />
-                  <span className="font-bold relative z-10 text-center">{getMachineDisplayName(num)}</span>
-                </div>
-              ))}
+              {machines.map(num => {
+                const isMachineRunning = Object.entries(savedTurns).some(([k, cfg]) => {
+                  if (cfg.rb === selectedRB && cfg.machine === num) {
+                    const prog = turnProgress[k];
+                    return prog?.isStarted && !prog?.isFinished;
+                  }
+                  return false;
+                });
+
+                return (
+                  <div key={num} onClick={() => handleSelectMachine(num)} 
+                       className={`relative bg-white dark:bg-gray-800 p-6 rounded-3xl border flex flex-col items-center justify-center cursor-pointer shadow-md transition active:scale-95 overflow-hidden ${
+                         isMachineRunning 
+                          ? 'border-blue-500 ring-2 ring-blue-400/50 shadow-blue-500/20' 
+                          : 'border-gray-100 dark:border-gray-700/50 hover:ring-2 ring-blue-400'
+                       }`}>
+                    {rippleMachine === num && <span className="absolute inset-0 rounded-3xl bg-blue-400/20 dark:bg-blue-500/30 animate-[ping_0.3s_ease-out_1]"></span>}
+                    
+                    <WashingMachine 
+                      size={40} 
+                      className={`mb-2 text-blue-500 relative z-10 ${isMachineRunning ? 'animate-[spin_3s_linear_infinite]' : ''}`} 
+                      strokeWidth={1.5} 
+                    />
+                    <span className="font-bold relative z-10 text-center">{getMachineDisplayName(num)}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ) : (
-          <div className="mt-8 animate-in fade-in slide-in-from-right-4">
+          <div className="mt-6 animate-in fade-in slide-in-from-right-4">
             <button onClick={() => setSelectedMachine(null)} className="mb-4 text-sm font-bold text-gray-500 hover:text-black dark:hover:text-white transition">{"< Back to Machine"}</button>
             
             <div className="flex flex-col items-center justify-center mb-4">
@@ -741,6 +742,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
                 dayTurnsList.map(([turnKey, turnData], idx) => {
                   const prog = turnProgress[turnKey];
                   const isFinished = prog?.isFinished;
+                  const isRunning = prog?.isStarted && !isFinished;
                   const displayIndex = turnData.turnIndex || (idx + 1);
 
                   return (
@@ -750,7 +752,9 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
                       className={`p-5 rounded-3xl shadow-sm border-2 cursor-pointer transition active:scale-95 flex justify-between items-center relative group
                       ${isFinished 
                         ? 'bg-green-50 dark:bg-green-900/20 border-green-500' 
-                        : 'bg-white dark:bg-gray-800 border-blue-500 hover:bg-blue-50/50'}`}
+                        : isRunning 
+                          ? 'bg-blue-50/80 dark:bg-blue-900/30 border-blue-500 ring-4 ring-blue-500/20 shadow-lg shadow-blue-500/10 animate-pulse' 
+                          : 'bg-white dark:bg-gray-800 border-blue-500 hover:bg-blue-50/50'}`}
                     >
                       <div>
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -760,6 +764,11 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
                           {turnData.borrowedRB && (
                             <span className="text-[10px] bg-yellow-400 text-black font-extrabold px-2.5 py-0.5 rounded-full uppercase shadow-sm">
                               BORROWED BY: {turnData.borrowedRB}
+                            </span>
+                          )}
+                          {isRunning && (
+                            <span className="text-[10px] bg-blue-500 text-white font-black px-2.5 py-0.5 rounded-full uppercase shadow-md">
+                              ● Cycles {prog?.currentCycle || 1}/{turnData.totalCycles}
                             </span>
                           )}
                           {turnData.createdDate < selectedDayDate && !isFinished && (
@@ -785,6 +794,10 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
                         {isFinished ? (
                           <span className="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
                             <CheckCircle2 size={14}/> Finished
+                          </span>
+                        ) : isRunning ? (
+                          <span className="bg-blue-500 text-white px-3.5 py-1 rounded-full text-xs font-bold flex items-center gap-1 shadow-md">
+                            <RotateCw size={14} className="animate-[spin_3s_linear_infinite]"/> Running
                           </span>
                         ) : (
                           <span className="bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
@@ -865,13 +878,12 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
   );
 }
 
-// --- TRANG DASHBOARD - BỘ LỌC ĐÃ CĂN GIỮA NÚT VÀ POPUP LỊCH ĐẸP CHUẨN XANH DƯƠNG ---
+// --- TRANG DASHBOARD ---
 function DashboardPage({ turnsData, progressData }) {
-  const [filterPeriod, setFilterPeriod] = useState('Week'); // 'Day', 'Week', 'Month'
+  const [filterPeriod, setFilterPeriod] = useState('Week');
   const [selectedMachineRBFilter, setSelectedMachineRBFilter] = useState('ALL');
   const [showMachineRBFilterDropdown, setShowMachineRBFilterDropdown] = useState(false);
 
-  // STATE POPUP CHỌN MULTI-SELECT
   const [showMultiSelectPopup, setShowMultiSelectPopup] = useState(false);
   const [selectedWeeks, setSelectedWeeks] = useState(['Sep W3 (21 Sep - 27 Sep)']);
   const [selectedMonths, setSelectedMonths] = useState(['Sep 2026']);
@@ -1010,7 +1022,6 @@ function DashboardPage({ turnsData, progressData }) {
         <h2 className="font-black text-2xl tracking-tight">Washing Dashboard</h2>
       </div>
 
-      {/* CHỌN CHẾ ĐỘ LỌC THỜI GIAN */}
       <div className="flex bg-white dark:bg-gray-800 p-1.5 rounded-2xl mb-3 border border-gray-100 dark:border-gray-700 shadow-sm">
         {['Day', 'Week', 'Month'].map(period => (
           <button 
@@ -1027,13 +1038,12 @@ function DashboardPage({ turnsData, progressData }) {
         ))}
       </div>
 
-      {/* NÚT MỞ POPUP NỘI DUNG ĐÃ ĐƯỢC CĂN GIỮA HOÀN HẢO */}
       <div className="mb-6">
         <button 
           onClick={() => setShowMultiSelectPopup(true)}
-          className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 py-3 px-4 rounded-2xl font-black text-xs relative flex items-center justify-center shadow-sm hover:border-blue-500 transition"
+          className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 py-3.5 px-10 rounded-2xl font-black text-xs relative flex items-center justify-center shadow-sm hover:border-blue-500 transition"
         >
-          <span className="text-center">
+          <span className="text-center truncate">
             {filterPeriod === 'Week' && `${selectedWeeks.length} Weeks Selected`}
             {filterPeriod === 'Month' && `${selectedMonths.length} Months Selected`}
             {filterPeriod === 'Day' && `${selectedDaysList.length} Days Selected`}
@@ -1192,7 +1202,6 @@ function DashboardPage({ turnsData, progressData }) {
         </div>
       </div>
 
-      {/* POPUP BỘ LỌC ĐA NĂNG ĐẢM BẢO CĂN GIỮA VÀ DÙNG MÀU XANH DƯƠNG ACTIVE */}
       {showMultiSelectPopup && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl max-w-sm w-full shadow-2xl animate-in zoom-in-95 border dark:border-gray-700">
@@ -1203,7 +1212,6 @@ function DashboardPage({ turnsData, progressData }) {
               <button onClick={() => setShowMultiSelectPopup(false)}><X size={20} className="text-gray-400"/></button>
             </div>
 
-            {/* POPUP CHỌN TUẦN MULTI-SELECT CĂN GIỮA NỘI DUNG */}
             {filterPeriod === 'Week' && (
               <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
                 {weekOptions.map(wk => {
@@ -1212,7 +1220,7 @@ function DashboardPage({ turnsData, progressData }) {
                     <div 
                       key={wk} 
                       onClick={() => toggleWeekSelect(wk)}
-                      className={`p-3.5 rounded-2xl font-bold text-xs cursor-pointer text-center relative transition-all ${
+                      className={`p-3.5 px-8 rounded-2xl font-bold text-xs cursor-pointer text-center relative transition-all ${
                         isSel ? 'bg-blue-500 text-white shadow-md scale-102' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200'
                       }`}
                     >
@@ -1224,7 +1232,6 @@ function DashboardPage({ turnsData, progressData }) {
               </div>
             )}
 
-            {/* POPUP CHỌN THÁNG MULTI-SELECT CĂN GIỮA NỘI DUNG */}
             {filterPeriod === 'Month' && (
               <div className="grid grid-cols-2 gap-2.5 max-h-64 overflow-y-auto">
                 {monthOptions.map(mo => {
@@ -1244,7 +1251,6 @@ function DashboardPage({ turnsData, progressData }) {
               </div>
             )}
 
-            {/* POPUP CHỌN NGÀY DẠNG LỊCH Ô TUẦN HOÀN CHỈNH ĐẸP MẮT */}
             {filterPeriod === 'Day' && (
               <div>
                 <div className="grid grid-cols-7 gap-1 text-center mb-2">
@@ -1460,27 +1466,36 @@ function TrackingPage({ turnsData, progressData, onOpenTurn }) {
           let statusText = 'Idle';
           let statusBadge = 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-300';
           let statusIcon = <Clock size={14} />;
+          const isRunning = progress.isStarted && !progress.isFinished;
 
           if (progress.isFinished) {
             statusText = 'Finished';
             statusBadge = 'bg-green-500 text-white';
             statusIcon = <CheckCircle2 size={14} />;
-          } else if (progress.isStarted) {
+          } else if (isRunning) {
             statusText = 'In Progress';
-            statusBadge = 'bg-blue-500 text-white animate-pulse';
-            statusIcon = <RotateCw size={14} className="animate-spin" />;
+            statusBadge = 'bg-blue-500 text-white shadow-md';
+            statusIcon = <RotateCw size={14} />;
           }
 
           return (
             <div 
               key={key} 
               onClick={() => onOpenTurn && onOpenTurn(key)}
-              className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-md border border-gray-100 dark:border-gray-700 transition-all hover:shadow-lg cursor-pointer active:scale-98"
+              className={`p-6 rounded-3xl shadow-md border transition-all hover:shadow-lg cursor-pointer active:scale-98 ${
+                isRunning 
+                  ? 'bg-blue-50/40 dark:bg-gray-800 border-blue-500 ring-2 ring-blue-500/20' 
+                  : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700'
+              }`}
             >
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-3">
                   <div className="p-3 bg-blue-50 dark:bg-gray-700 rounded-2xl">
-                    <WashingMachine size={28} className="text-blue-500" strokeWidth={1.5} />
+                    <WashingMachine 
+                      size={28} 
+                      className={`text-blue-500 ${isRunning ? 'animate-[spin_3s_linear_infinite]' : ''}`} 
+                      strokeWidth={1.5} 
+                    />
                   </div>
                   <div>
                     <div className="h-6 flex items-center mb-1">
@@ -1626,7 +1641,7 @@ function CalendarModal({ currentDate, onClose, onSelect }) {
   );
 }
 
-// --- TRANG CHẠY CYCLES ---
+// --- TRANG CHẠY CYCLES (GHI TRỰC TIẾP GIỜ START/DONE VÀO SUPABASE) ---
 function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, onProgressUpdate }) {
   const [currentCycle, setCurrentCycle] = useState(1);
   const [startTime, setStartTime] = useState(null);
@@ -1640,7 +1655,89 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
   const [remarks, setRemarks] = useState({});
   const [editingRemark, setEditingRemark] = useState('');
 
+  const [isEditingTime, setIsEditingTime] = useState(false);
+  const [editStartTimeStr, setEditStartTimeStr] = useState('');
+  const [editEndTimeStr, setEditEndTimeStr] = useState('');
+
   const isFinished = currentCycle > config.totalCycles;
+
+  const turnIdKey = `${config.rb}_${config.machine}_${config.createdDate}_${config.turnIndex || config.turn}`;
+
+  // TẢI LOGS DỮ LIỆU CYCLES CHI TIẾT TỪ SUPABASE
+  const fetchCyclesFromSupabase = async () => {
+    try {
+      const { data: logs } = await supabase
+        .from('cycle_logs')
+        .select('*')
+        .eq('turn_id', turnIdKey)
+        .order('cycle_number', { ascending: true });
+
+      if (logs && logs.length > 0) {
+        let maxCycleDone = 0;
+        let runningStart = null;
+        let runningWho = null;
+        let loadedCycles = [];
+        let loadedRemarks = {};
+
+        logs.forEach(l => {
+          if (l.admin_remark) {
+            loadedRemarks[l.cycle_number] = l.admin_remark;
+          }
+
+          if (l.end_time && l.start_time) {
+            const sDate = new Date(l.start_time);
+            const eDate = new Date(l.end_time);
+            const dur = l.duration_minutes || differenceInMinutes(eDate, sDate);
+            const hour = getHours(eDate);
+
+            let color = 'bg-gray-200 text-black';
+            if (dur > 120) color = 'bg-red-500 text-white';
+            else if (hour >= 6 && hour < 18) color = 'bg-yellow-400 text-black';
+            else color = 'bg-blue-900 text-white';
+
+            if (l.cycle_number === config.totalCycles) color = 'bg-green-500 text-white';
+
+            loadedCycles.push({
+              cycle: l.cycle_number,
+              start: sDate,
+              end: eDate,
+              duration: dur,
+              color,
+              whoStarted: l.who_started || 'System',
+              whoEnded: l.who_ended || 'System',
+              recordDate: l.record_date || currentDate
+            });
+
+            if (l.cycle_number > maxCycleDone) {
+              maxCycleDone = l.cycle_number;
+            }
+          } else if (l.start_time && !l.end_time) {
+            runningStart = new Date(l.start_time);
+            runningWho = l.who_started;
+          }
+        });
+
+        setCyclesData(loadedCycles);
+        setRemarks(loadedRemarks);
+
+        if (runningStart) {
+          setCurrentCycle(maxCycleDone + 1);
+          setStartTime(runningStart);
+          setStartedBy(runningWho);
+        } else {
+          setCurrentCycle(maxCycleDone + 1);
+          setStartTime(null);
+          setStartedBy(null);
+        }
+      }
+    } catch (e) {
+      console.log('Fetch cycle logs error:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchCyclesFromSupabase();
+  }, [config]);
 
   useEffect(() => {
     if (onProgressUpdate) {
@@ -1679,14 +1776,31 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
     } catch (e) {}
   };
 
-  const handleStart = () => {
+  // THAO TÁC START BẤM: GHI VÀO SUPABASE NGAY
+  const handleStart = async () => {
     if(isFinished || !canEditOrAdd) return;
     playBeep(800, 0.1); 
-    setStartTime(new Date()); 
+    const now = new Date();
+    setStartTime(now); 
     setStartedBy(currentUser.username);
+
+    try {
+      await supabase.from('cycle_logs').upsert([
+        {
+          turn_id: turnIdKey,
+          cycle_number: currentCycle,
+          start_time: now.toISOString(),
+          who_started: currentUser.username,
+          record_date: currentDate || format(new Date(), 'dd-MMM')
+        }
+      ]);
+    } catch (e) {
+      console.log('Start log save err:', e);
+    }
   };
 
-  const handleDone = () => {
+  // THAO TÁC DONE BẤM: GHI HOÀN TẤT VÀO SUPABASE NGAY
+  const handleDone = async () => {
     if (!startTime || isFinished || !canEditOrAdd) return;
     const now = new Date();
     const durationMinutes = differenceInMinutes(now, startTime);
@@ -1723,16 +1837,28 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
     };
 
     setCyclesData([...cyclesData, newData]);
+
+    try {
+      await supabase.from('cycle_logs').upsert([
+        {
+          turn_id: turnIdKey,
+          cycle_number: currentCycle,
+          start_time: startTime.toISOString(),
+          end_time: now.toISOString(),
+          duration_minutes: durationMinutes,
+          who_started: startedBy,
+          who_ended: currentUser.username,
+          record_date: currentDate || format(new Date(), 'dd-MMM')
+        }
+      ]);
+    } catch (e) {
+      console.log('Done log save err:', e);
+    }
     
     if (currentCycle <= config.totalCycles) {
       setCurrentCycle(prev => prev + 1);
-      if (currentCycle < config.totalCycles) {
-        setStartTime(new Date()); 
-        setStartedBy(currentUser.username); 
-      } else {
-        setStartTime(null);
-        setStartedBy(null);
-      }
+      setStartTime(null);
+      setStartedBy(null);
     }
   };
 
@@ -1747,11 +1873,71 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
         await supabase
           .from('cycle_logs')
           .delete()
-          .eq('turn_id', `${config.rb}_${config.machine}_${config.createdDate}_${config.turnIndex || config.turn}`)
+          .eq('turn_id', turnIdKey)
           .eq('cycle_number', cycleNum);
       } catch (err) {
         console.log('Delete cycle log err:', err);
       }
+    }
+  };
+
+  const handleOpenEditTime = (data) => {
+    setEditStartTimeStr(format(data.start, 'HH:mm'));
+    setEditEndTimeStr(format(data.end, 'HH:mm'));
+    setIsEditingTime(true);
+  };
+
+  const handleSaveEditTime = async () => {
+    if (!selectedCycleInfo) return;
+
+    try {
+      const [startH, startM] = editStartTimeStr.split(':').map(Number);
+      const [endH, endM] = editEndTimeStr.split(':').map(Number);
+
+      const newStart = new Date(selectedCycleInfo.start);
+      newStart.setHours(startH, startM);
+
+      const newEnd = new Date(selectedCycleInfo.end);
+      newEnd.setHours(endH, endM);
+
+      const newDuration = differenceInMinutes(newEnd, newStart);
+
+      const updatedData = {
+        ...selectedCycleInfo,
+        start: newStart,
+        end: newEnd,
+        duration: Math.max(0, newDuration)
+      };
+
+      setCyclesData(cyclesData.map(c => c.cycle === selectedCycleInfo.cycle ? updatedData : c));
+      setSelectedCycleInfo(updatedData);
+      setIsEditingTime(false);
+
+      await supabase
+        .from('cycle_logs')
+        .update({ 
+          start_time: newStart.toISOString(),
+          end_time: newEnd.toISOString(),
+          duration_minutes: Math.max(0, newDuration)
+        })
+        .eq('turn_id', turnIdKey)
+        .eq('cycle_number', selectedCycleInfo.cycle);
+
+    } catch (e) {
+      console.log('Error saving edited time:', e);
+    }
+  };
+
+  const handleSaveRemark = async (cycleNum, remarkText) => {
+    setRemarks({ ...remarks, [cycleNum]: remarkText });
+    try {
+      await supabase
+        .from('cycle_logs')
+        .update({ admin_remark: remarkText })
+        .eq('turn_id', turnIdKey)
+        .eq('cycle_number', cycleNum);
+    } catch (e) {
+      console.log('Remark save err:', e);
     }
   };
 
@@ -1809,6 +1995,7 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
                    if (data) {
                      setSelectedCycleInfo(selectedCycleInfo?.cycle === cNum ? null : data);
                      setEditingRemark(remarks[cNum] || '');
+                     setIsEditingTime(false);
                    } else if (isCurrent) {
                      setSelectedCycleInfo('current');
                    }
@@ -1849,13 +2036,22 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
         <div className="mt-8 p-6 bg-blue-50/50 dark:bg-gray-800/80 rounded-3xl shadow-lg border border-blue-200 dark:border-blue-900/50 animate-in slide-in-from-bottom-4 relative">
           <div className="absolute top-4 right-4 flex items-center gap-2">
             {currentUser.username.toLowerCase() === 'baohuynh' && (
-              <button 
-                onClick={() => handleDeleteCycleLog(selectedCycleInfo.cycle)}
-                className="p-1.5 rounded-full bg-red-100 text-red-600 hover:bg-red-500 hover:text-white transition"
-                title="Delete Cycle Log"
-              >
-                <Trash2 size={16} />
-              </button>
+              <>
+                <button 
+                  onClick={() => handleOpenEditTime(selectedCycleInfo)}
+                  className="p-1.5 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-500 hover:text-white transition"
+                  title="Edit Start / End Time"
+                >
+                  <Edit3 size={16} />
+                </button>
+                <button 
+                  onClick={() => handleDeleteCycleLog(selectedCycleInfo.cycle)}
+                  className="p-1.5 rounded-full bg-red-100 text-red-600 hover:bg-red-500 hover:text-white transition"
+                  title="Delete Cycle Log"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </>
             )}
             <button onClick={() => setSelectedCycleInfo(null)} className="p-1.5 rounded-full bg-blue-100 dark:bg-gray-700 hover:bg-blue-200 text-gray-500 transition">
               <X size={16} />
@@ -1865,55 +2061,94 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
           <h4 className="font-black border-b dark:border-gray-600 pb-3 mb-4 text-xl flex items-center gap-2 text-blue-500">
             <Clock size={20}/> Cycle {selectedCycleInfo.cycle} Details
           </h4>
-          
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <span className="font-medium text-gray-500">Time start</span> 
-              <span className="font-bold">{selectedCycleInfo.recordDate || currentDate}, {format(selectedCycleInfo.start, 'HH:mm')}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-medium text-gray-500">Time ended</span> 
-              <span className="font-bold">{selectedCycleInfo.recordDate || currentDate}, {format(selectedCycleInfo.end, 'HH:mm')}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-medium text-gray-500">Duration</span> 
-              <span className="font-bold text-blue-500">{Math.round(selectedCycleInfo.duration / 60)}h ({selectedCycleInfo.duration}m)</span>
-            </div>
-            <div className="flex justify-between mt-2 pt-2 border-t dark:border-gray-700">
-              <span className="font-medium text-gray-500">Who started</span> 
-              <span className="font-bold">{selectedCycleInfo.whoStarted}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-medium text-gray-500">Who ended</span> 
-              <span className="font-bold">{selectedCycleInfo.whoEnded}</span>
-            </div>
 
-            <div className="mt-4 pt-3 border-t dark:border-gray-700">
-              <span className="font-bold text-xs text-gray-500 block mb-1.5">
-                Leader's Remark:
-              </span>
-              {currentUser.role === 'admin' ? (
-                <div className="flex gap-2">
-                  <input 
-                    value={editingRemark}
-                    onChange={e => setEditingRemark(e.target.value)}
-                    placeholder="Add leader remark..."
-                    className="flex-1 p-2 bg-white dark:bg-gray-700 rounded-xl text-xs border dark:border-gray-600 outline-none font-medium"
-                  />
-                  <button 
-                    onClick={() => setRemarks({ ...remarks, [selectedCycleInfo.cycle]: editingRemark })}
-                    className="bg-blue-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-blue-600 transition"
-                  >
-                    Save
-                  </button>
-                </div>
-              ) : (
-                <p className="text-xs italic text-gray-600 dark:text-gray-300 font-medium">
-                  {remarks[selectedCycleInfo.cycle] || 'No remark added for this cycle.'}
-                </p>
-              )}
+          {isEditingTime ? (
+            <div className="space-y-3 text-sm animate-in fade-in">
+              <div className="flex justify-between items-center">
+                <span className="font-bold text-gray-500">Edit Time Start:</span>
+                <input 
+                  type="time" 
+                  value={editStartTimeStr} 
+                  onChange={e => setEditStartTimeStr(e.target.value)}
+                  className="p-2 border rounded-xl font-black bg-white dark:bg-gray-700 text-black dark:text-white"
+                />
+              </div>
+
+              <div className="flex justify-between items-center">
+                <span className="font-bold text-gray-500">Edit Time Ended:</span>
+                <input 
+                  type="time" 
+                  value={editEndTimeStr} 
+                  onChange={e => setEditEndTimeStr(e.target.value)}
+                  className="p-2 border rounded-xl font-black bg-white dark:bg-gray-700 text-black dark:text-white"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button 
+                  onClick={() => setIsEditingTime(false)}
+                  className="flex-1 py-2 bg-gray-200 dark:bg-gray-700 rounded-xl font-bold text-xs"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleSaveEditTime}
+                  className="flex-1 py-2 bg-blue-500 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1"
+                >
+                  <Save size={14}/> Save Changes
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="font-medium text-gray-500">Time start</span> 
+                <span className="font-bold">{selectedCycleInfo.recordDate || currentDate}, {format(selectedCycleInfo.start, 'HH:mm')}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium text-gray-500">Time ended</span> 
+                <span className="font-bold">{selectedCycleInfo.recordDate || currentDate}, {format(selectedCycleInfo.end, 'HH:mm')}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium text-gray-500">Duration</span> 
+                <span className="font-bold text-blue-500">{Math.round(selectedCycleInfo.duration / 60)}h ({selectedCycleInfo.duration}m)</span>
+              </div>
+              <div className="flex justify-between mt-2 pt-2 border-t dark:border-gray-700">
+                <span className="font-medium text-gray-500">Who started</span> 
+                <span className="font-bold">{selectedCycleInfo.whoStarted}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium text-gray-500">Who ended</span> 
+                <span className="font-bold">{selectedCycleInfo.whoEnded}</span>
+              </div>
+
+              <div className="mt-4 pt-3 border-t dark:border-gray-700">
+                <span className="font-bold text-xs text-gray-500 block mb-1.5">
+                  Leader's Remark:
+                </span>
+                {currentUser.role === 'admin' ? (
+                  <div className="flex gap-2">
+                    <input 
+                      value={editingRemark}
+                      onChange={e => setEditingRemark(e.target.value)}
+                      placeholder="Add leader remark..."
+                      className="flex-1 p-2 bg-white dark:bg-gray-700 rounded-xl text-xs border dark:border-gray-600 outline-none font-medium"
+                    />
+                    <button 
+                      onClick={() => handleSaveRemark(selectedCycleInfo.cycle, editingRemark)}
+                      className="bg-blue-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-blue-600 transition"
+                    >
+                      Save
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs italic text-gray-600 dark:text-gray-300 font-medium">
+                    {remarks[selectedCycleInfo.cycle] || 'No remark added for this cycle.'}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       ) : startTime && !isFinished ? (
         <div className="mt-8 p-6 bg-blue-50/50 dark:bg-gray-800/80 rounded-3xl shadow-lg border border-blue-200 dark:border-blue-900/50 animate-in slide-in-from-bottom-4 relative">
@@ -1923,7 +2158,7 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
             </button>
           )}
           <h4 className="font-black border-b dark:border-gray-600 pb-3 mb-4 text-xl flex items-center gap-2 text-blue-500">
-            <Clock size={20} className="animate-spin" /> Cycle {currentCycle} (In Progress)
+            <Clock size={20} className="animate-[spin_3s_linear_infinite]" /> Cycle {currentCycle} (In Progress)
           </h4>
           <div className="space-y-3 text-sm">
             <div className="flex justify-between">
@@ -2082,7 +2317,6 @@ function ProfilePage({ user, onLogout, turnsData = {}, progressData = {}, refres
   const [editingRbUserId, setEditingRbUserId] = useState(null);
   
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [showTimeEditModal, setShowTimeEditModal] = useState(false);
   const [showLogsModal, setShowTimeLogsModal] = useState(false);
 
   const [newPassword, setNewPassword] = useState('');
@@ -2283,14 +2517,6 @@ function ProfilePage({ user, onLogout, turnsData = {}, progressData = {}, refres
           <div>
             <h4 className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">Record Modification</h4>
             <button 
-              onClick={() => setShowTimeEditModal(true)}
-              className="w-full text-left bg-gray-900 dark:bg-gray-700 p-4 rounded-2xl font-bold text-sm hover:bg-gray-800 transition mb-2 flex justify-between items-center"
-            >
-              <span>Edit Time Start / Duration</span>
-              <ChevronRight size={16} className="text-gray-400" />
-            </button>
-            
-            <button 
               onClick={() => setShowTimeLogsModal(true)}
               className="w-full text-left bg-gray-900 dark:bg-gray-700 p-4 rounded-2xl font-bold text-sm hover:bg-gray-800 transition flex justify-between items-center"
             >
@@ -2329,30 +2555,6 @@ function ProfilePage({ user, onLogout, turnsData = {}, progressData = {}, refres
             <div className="flex gap-2">
               <button onClick={() => setShowPasswordModal(false)} className="flex-1 py-3 bg-gray-200 dark:bg-gray-700 rounded-xl font-bold text-xs">Cancel</button>
               <button onClick={handleChangePassword} className="flex-1 py-3 bg-blue-500 text-white rounded-xl font-bold text-xs">Update</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* POPUP EDIT TIME START / DURATION */}
-      {showTimeEditModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl max-w-sm w-full shadow-2xl animate-in zoom-in-95">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg flex items-center gap-2"><Clock size={18}/> Edit Time & Duration</h3>
-              <button onClick={() => setShowTimeEditModal(false)}><X size={20} className="text-gray-400"/></button>
-            </div>
-            <p className="text-xs text-gray-400 font-medium mb-4">Select Turn to override time logs in Supabase database.</p>
-            <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-              {turnEntries.map(([k, turn]) => (
-                <div key={k} className="p-3 bg-gray-50 dark:bg-gray-900 rounded-xl flex justify-between items-center text-xs">
-                  <div>
-                    <span className="font-bold block">Turn {turn.turnIndex || 1}: {turn.turnName}</span>
-                    <span className="text-gray-400">Machine {turn.machine} • {turn.createdDate}</span>
-                  </div>
-                  <button onClick={() => alert(`Edit Time feature active for ${turn.turnName}`)} className="bg-blue-500 text-white px-3 py-1.5 rounded-lg font-bold">Edit</button>
-                </div>
-              ))}
             </div>
           </div>
         </div>
