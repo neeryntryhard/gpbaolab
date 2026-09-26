@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { WashingMachine, BarChart3, User, Calendar as CalendarIcon, AlertTriangle, X, ChevronDown, Plus, CheckCircle2, Info, Shirt, RotateCw, Clock, LogOut, Key, Target, ChevronLeft, ChevronRight, ShieldCheck, Trash2, Edit3, Repeat, MessageSquare, Filter, Building, FileText, Check, Save } from 'lucide-react';
+import { WashingMachine, BarChart3, User, Calendar as CalendarIcon, AlertTriangle, X, ChevronDown, Plus, CheckCircle2, Info, Shirt, RotateCw, Clock, LogOut, Key, Target, ChevronLeft, ChevronRight, ShieldCheck, Trash2, Edit3, Repeat, Filter, Building, FileText, Check, Save } from 'lucide-react';
 import { format, differenceInMinutes, getHours, addDays, startOfWeek, endOfWeek, parse, isSameDay, isBefore, startOfDay } from 'date-fns';
 import { createClient } from '@supabase/supabase-js';
 
@@ -9,11 +9,16 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// DANH SÁCH MÁY MẶC ĐỊNH
+// BIẾN TOÀN CỤC CHUẨN XÁC ĐỂ TRÁNH LỖI MẤT LOGO
+const GLOBAL_RBS = ['adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd', 'ad'];
 const BASE_MACHINES = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => {
+    const savedUser = localStorage.getItem('gpbao_user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+  
   const [theme, setTheme] = useState('light');
 
   useEffect(() => {
@@ -44,8 +49,18 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  if (!currentUser) return <AuthScreen onLogin={setCurrentUser} />;
-  return <MainLayout currentUser={currentUser} theme={theme} onLogout={() => setCurrentUser(null)} />;
+  const handleLogin = (user) => {
+    setCurrentUser(user);
+    localStorage.setItem('gpbao_user', JSON.stringify(user));
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('gpbao_user');
+  };
+
+  if (!currentUser) return <AuthScreen onLogin={handleLogin} />;
+  return <MainLayout currentUser={currentUser} theme={theme} onLogout={handleLogout} />;
 }
 
 // --- MÀN HÌNH ĐĂNG NHẬP & ĐĂNG KÝ ---
@@ -57,8 +72,6 @@ function AuthScreen({ onLogin }) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
-  
-  const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
 
   useEffect(() => {
     document.title = "lab. GPBAO";
@@ -178,7 +191,7 @@ function AuthScreen({ onLogin }) {
               </div>
               {showDropdown && (
                 <div className="absolute top-full mt-2 w-full bg-white dark:bg-gray-700 rounded-2xl shadow-xl border dark:border-gray-600 overflow-hidden z-50">
-                  {RBs.map(brand => (
+                  {GLOBAL_RBS.map(brand => (
                     <div key={brand} onClick={() => {setRb(brand); setShowDropdown(false);}} className="px-5 py-3 hover:bg-blue-500 hover:text-white cursor-pointer transition-colors dark:text-white uppercase font-bold text-sm">
                       {brand}
                     </div>
@@ -204,12 +217,36 @@ function AuthScreen({ onLogin }) {
 
 // --- GIAO DIỆN CHÍNH & BOTTOM NAV ---
 function MainLayout({ currentUser, onLogout }) {
-  const [activeTab, setActiveTab] = useState('dashboard'); 
-  const [resetWashingTrigger, setResetWashingTrigger] = useState(0);
+  const [activeTab, setActiveTab] = useState(() => {
+    const hash = window.location.hash.replace('#', '');
+    return ['washing', 'tracking', 'dashboard', 'profile'].includes(hash) ? hash : 'washing';
+  });
 
+  const [resetWashingTrigger, setResetWashingTrigger] = useState(0);
   const [globalTurnsData, setGlobalTurnsData] = useState({});
   const [globalProgressData, setGlobalProgressData] = useState({});
   const [targetRunKey, setTargetRunKey] = useState(null);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const hash = window.location.hash.replace('#', '');
+      setActiveTab(['washing', 'tracking', 'dashboard', 'profile'].includes(hash) ? hash : 'washing');
+    };
+    
+    window.addEventListener('popstate', handlePopState);
+    if (!window.location.hash) {
+      window.history.replaceState(null, '', '#washing');
+    }
+    
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const changeTab = (tab) => {
+    if (window.location.hash !== `#${tab}`) {
+      window.history.pushState(null, '', `#${tab}`);
+    }
+    setActiveTab(tab);
+  };
 
   const fetchSupabaseData = async () => {
     try {
@@ -266,14 +303,14 @@ function MainLayout({ currentUser, onLogout }) {
   }, []);
 
   const handleWashingClick = () => {
-    setActiveTab('washing');
+    changeTab('washing');
     setTargetRunKey(null);
     setResetWashingTrigger(prev => prev + 1);
   };
 
   const handleNavigateToRun = (turnKey) => {
     setTargetRunKey(turnKey);
-    setActiveTab('washing');
+    changeTab('washing');
   };
 
   return (
@@ -321,17 +358,17 @@ function MainLayout({ currentUser, onLogout }) {
           <span className="text-[10px] mt-1">Washing</span>
         </button>
 
-        <button onClick={() => setActiveTab('tracking')} className={`flex flex-col items-center transition ${activeTab === 'tracking' ? 'text-black dark:text-white scale-105 font-bold' : 'text-gray-400'}`}>
+        <button onClick={() => changeTab('tracking')} className={`flex flex-col items-center transition ${activeTab === 'tracking' ? 'text-black dark:text-white scale-105 font-bold' : 'text-gray-400'}`}>
           <Target size={22} />
           <span className="text-[10px] mt-1">Tracking</span>
         </button>
 
-        <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center transition ${activeTab === 'dashboard' ? 'text-black dark:text-white scale-105 font-bold' : 'text-gray-400'}`}>
+        <button onClick={() => changeTab('dashboard')} className={`flex flex-col items-center transition ${activeTab === 'dashboard' ? 'text-black dark:text-white scale-105 font-bold' : 'text-gray-400'}`}>
           <BarChart3 size={22} />
           <span className="text-[10px] mt-1">Dashboard</span>
         </button>
 
-        <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center transition ${activeTab === 'profile' ? 'text-black dark:text-white scale-105 font-bold' : 'text-gray-400'}`}>
+        <button onClick={() => changeTab('profile')} className={`flex flex-col items-center transition ${activeTab === 'profile' ? 'text-black dark:text-white scale-105 font-bold' : 'text-gray-400'}`}>
           <User size={22} />
           <span className="text-[10px] mt-1">Profile</span>
         </button>
@@ -387,8 +424,6 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
     return () => clearInterval(timer);
   }, []);
 
-  const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
-  
   const detectedMachines = Object.values(savedTurns).map(t => t.machine).filter(Boolean);
   const machines = Array.from(new Set([...BASE_MACHINES, ...detectedMachines])).sort((a, b) => a - b);
 
@@ -565,7 +600,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
              </div>
              <h3 className="text-center text-gray-500 mb-6 font-bold text-sm">Choose your RB</h3>
              <div className="grid grid-cols-2 gap-4">
-               {RBs.map(rb => (
+               {GLOBAL_RBS.map(rb => (
                  <div key={rb} onClick={() => handleSelectRB(rb)} 
                       className={`relative bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-md border border-gray-100 dark:border-gray-700/50 flex items-center justify-center cursor-pointer hover:ring-2 ring-blue-400 transition active:scale-95 h-32 overflow-hidden ${
                         rippleRB === rb ? 'ring-2 ring-blue-500' : ''
@@ -909,8 +944,6 @@ function DashboardPage({ turnsData, progressData }) {
   const [selectedMonths, setSelectedMonths] = useState(['Sep 2026']);
   const [selectedDaysList, setSelectedDaysList] = useState([format(new Date(), 'dd-MMM')]);
 
-  const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
-
   const detectedMachines = Object.values(turnsData).map(t => t.machine).filter(Boolean);
   const activeMachinesList = Array.from(new Set([...BASE_MACHINES, ...detectedMachines])).sort((a, b) => a - b);
 
@@ -965,7 +998,7 @@ function DashboardPage({ turnsData, progressData }) {
     return true;
   };
 
-  const rbStats = RBs.map(rb => {
+  const rbStats = GLOBAL_RBS.map(rb => {
     let totalCycles = 0;
     let totalTurns = 0;
     let totalDurationMins = 0;
@@ -1071,7 +1104,7 @@ function DashboardPage({ turnsData, progressData }) {
         </button>
       </div>
 
-      {/* 1. RB STATISTICS */}
+      {/* 1. RB STATISTICS (CÓ FORCEWHITE CHO LOGO TRÊN NỀN ĐEN) */}
       <div className="bg-gray-900 text-white p-6 rounded-3xl shadow-xl border border-gray-800 mb-6">
         <h3 className="font-black text-center text-lg mb-4 tracking-wide">
           RB Statistics
@@ -1149,7 +1182,7 @@ function DashboardPage({ turnsData, progressData }) {
         </div>
       </div>
 
-      {/* 3. MACHINE METRICS */}
+      {/* 3. MACHINE METRICS (CÓ FORCEWHITE CHO LOGO TRÊN NỀN ĐEN) */}
       <div className="bg-gray-900 text-white p-6 rounded-3xl shadow-xl border border-gray-800 mb-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-black text-base flex items-center gap-2">
@@ -1172,7 +1205,7 @@ function DashboardPage({ turnsData, progressData }) {
                 >
                   ALL RBs
                 </div>
-                {RBs.map(r => (
+                {GLOBAL_RBS.map(r => (
                   <div 
                     key={r} 
                     onClick={() => { setSelectedMachineRBFilter(r); setShowMachineRBFilterDropdown(false); }}
@@ -1310,8 +1343,6 @@ function DashboardPage({ turnsData, progressData }) {
 
 // --- TRANG TRACKING ---
 function TrackingPage({ turnsData, progressData, onOpenTurn }) {
-  const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
-  
   const detectedMachines = Object.values(turnsData).map(t => t.machine).filter(Boolean);
   const machinesList = Array.from(new Set([...BASE_MACHINES, ...detectedMachines])).sort((a, b) => a - b);
   
@@ -1338,7 +1369,7 @@ function TrackingPage({ turnsData, progressData, onOpenTurn }) {
     setSelectedRBs([]);
   };
 
-  const activeRBsToDisplay = selectedRBs.length > 0 ? selectedRBs : RBs;
+  const activeRBsToDisplay = selectedRBs.length > 0 ? selectedRBs : GLOBAL_RBS;
   const allMachineCards = [];
 
   activeRBsToDisplay.forEach(rbName => {
@@ -1421,7 +1452,7 @@ function TrackingPage({ turnsData, progressData, onOpenTurn }) {
           All
         </button>
 
-        {RBs.map(rb => {
+        {GLOBAL_RBS.map(rb => {
           const isSelected = selectedRBs.includes(rb);
           return (
             <div 
@@ -1588,10 +1619,6 @@ function RBLogo({ rbName, className = "h-12", forceWhite = false }) {
       className={`${className} max-w-[85%] object-contain transition-all ${
         keepOriginalColor ? '' : colorClass
       }`} 
-      onError={(e) => { 
-        e.target.style.display = 'none'; 
-        if (e.target.nextSibling) e.target.nextSibling.style.display = 'block'; 
-      }}
     />
   );
 }
@@ -2231,8 +2258,6 @@ function TurnFormModal({ turn, isBorrow, currentRB, remainingCycles, onClose, on
   const [showBorrowDropdown, setShowBorrowDropdown] = useState(false);
   const [warningMsg, setWarningMsg] = useState('');
 
-  const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
-
   const handleSave = () => {
     if (!turnName.trim()) {
       setWarningMsg('Please enter turn name');
@@ -2276,7 +2301,7 @@ function TurnFormModal({ turn, isBorrow, currentRB, remainingCycles, onClose, on
 
               {showBorrowDropdown && (
                 <div className="absolute top-full mt-2 w-full bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
-                  {RBs.filter(r => r !== currentRB).map(brand => (
+                  {GLOBAL_RBS.filter(r => r !== currentRB).map(brand => (
                     <div 
                       key={brand} 
                       onClick={() => { setBorrowedRB(brand); setShowBorrowDropdown(false); }} 
@@ -2361,8 +2386,6 @@ function ProfilePage({ user, onLogout, turnsData = {}, progressData = {}, refres
 
   const [newPassword, setNewPassword] = useState('');
   const [pwdMsg, setPwdMsg] = useState('');
-
-  const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
 
   const fetchUsers = async () => {
     try {
@@ -2536,7 +2559,7 @@ function ProfilePage({ user, onLogout, turnsData = {}, progressData = {}, refres
 
                   {editingRbUserId === tech.id && (
                     <div className="pt-2 border-t border-gray-800 grid grid-cols-4 gap-1 animate-in fade-in">
-                      {RBs.map(r => (
+                      {GLOBAL_RBS.map(r => (
                         <button 
                           key={r} 
                           onClick={() => updateServerUserRb(tech.id, r)}
