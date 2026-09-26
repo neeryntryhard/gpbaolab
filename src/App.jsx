@@ -9,7 +9,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// BIẾN TOÀN CỤC CHUẨN XÁC ĐỂ TRÁNH LỖI MẤT LOGO
+// BIẾN TOÀN CỤC CHUẨN XÁC: AD NẰM CUỐI CÙNG
 const GLOBAL_RBS = ['adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd', 'ad'];
 const BASE_MACHINES = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
@@ -227,14 +227,19 @@ function MainLayout({ currentUser, onLogout }) {
   const [globalProgressData, setGlobalProgressData] = useState({});
   const [targetRunKey, setTargetRunKey] = useState(null);
 
+  // FIX LỖI BACK BUTTON: Theo dõi lịch sử trình duyệt thay đổi
   useEffect(() => {
     const handlePopState = () => {
       const hash = window.location.hash.replace('#', '');
-      setActiveTab(['washing', 'tracking', 'dashboard', 'profile'].includes(hash) ? hash : 'washing');
+      if (['washing', 'tracking', 'dashboard', 'profile'].includes(hash)) {
+        setActiveTab(hash);
+      } else if (hash === 'runner') {
+        setActiveTab('washing');
+      }
     };
     
     window.addEventListener('popstate', handlePopState);
-    if (!window.location.hash) {
+    if (!window.location.hash || window.location.hash === '#runner') {
       window.history.replaceState(null, '', '#washing');
     }
     
@@ -401,6 +406,17 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
   const [cyclesWarningModal, setCyclesWarningModal] = useState(false);
   const [busyTurnName, setBusyTurnName] = useState(null);
 
+  // FIX LỖI BACK BUTTON: Lắng nghe lịch sử trình duyệt để đóng màn hình Runner khi người dùng vuốt về
+  useEffect(() => {
+    const onPopState = () => {
+      if (viewMode === 'runner' && window.location.hash !== '#runner') {
+        setViewMode('setup');
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [viewMode]);
+
   useEffect(() => {
     if (targetRunKey && savedTurns[targetRunKey]) {
       const config = savedTurns[targetRunKey];
@@ -408,6 +424,9 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
       setSelectedMachine(config.machine);
       setActiveRunnerId(targetRunKey);
       setViewMode('runner');
+      if (window.location.hash !== '#runner') {
+        window.history.pushState(null, '', '#runner');
+      }
     }
   }, [targetRunKey, savedTurns]);
 
@@ -461,6 +480,9 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
 
     setActiveRunnerId(turnId);
     setViewMode('runner');
+    if (window.location.hash !== '#runner') {
+      window.history.pushState(null, '', '#runner');
+    }
   };
 
   const updateTurnProgress = async (turnId, currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj) => {
@@ -877,7 +899,13 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
                   currentUser={currentUser} 
                   currentDate={date}
                   canEditOrAdd={canEditOrAdd}
-                  onBack={() => setViewMode('setup')}
+                  onBack={() => {
+                    if (window.location.hash === '#runner') {
+                      window.history.back();
+                    } else {
+                      setViewMode('setup');
+                    }
+                  }}
                   onProgressUpdate={(currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj) => updateTurnProgress(turnKey, currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj)} 
                 />
             </div>
@@ -1104,7 +1132,6 @@ function DashboardPage({ turnsData, progressData }) {
         </button>
       </div>
 
-      {/* 1. RB STATISTICS (CÓ FORCEWHITE CHO LOGO TRÊN NỀN ĐEN) */}
       <div className="bg-gray-900 text-white p-6 rounded-3xl shadow-xl border border-gray-800 mb-6">
         <h3 className="font-black text-center text-lg mb-4 tracking-wide">
           RB Statistics
@@ -1152,7 +1179,6 @@ function DashboardPage({ turnsData, progressData }) {
         </div>
       </div>
 
-      {/* 2. BIỂU ĐỒ TRÒN BREAKDOWN */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-md border border-gray-100 dark:border-gray-700 mb-6">
         <h3 className="font-black text-base mb-4 flex items-center gap-2">
           <RotateCw size={18} className="text-blue-500"/> Cycles Breakdown by RB
@@ -1182,7 +1208,6 @@ function DashboardPage({ turnsData, progressData }) {
         </div>
       </div>
 
-      {/* 3. MACHINE METRICS (CÓ FORCEWHITE CHO LOGO TRÊN NỀN ĐEN) */}
       <div className="bg-gray-900 text-white p-6 rounded-3xl shadow-xl border border-gray-800 mb-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-black text-base flex items-center gap-2">
