@@ -9,7 +9,6 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// BIẾN TOÀN CỤC CHUẨN XÁC: AD NẰM CUỐI CÙNG
 const GLOBAL_RBS = ['adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd', 'ad'];
 const BASE_MACHINES = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
@@ -227,7 +226,18 @@ function MainLayout({ currentUser, onLogout }) {
   const [globalProgressData, setGlobalProgressData] = useState({});
   const [targetRunKey, setTargetRunKey] = useState(null);
 
-  // FIX LỖI BACK BUTTON: Theo dõi lịch sử trình duyệt thay đổi
+  // QUẢN LÝ THỜI GIAN QUY ĐỊNH CỦA MÁY (OPERATION TIME)
+  const [machineOpTimes, setMachineOpTimes] = useState(() => {
+    const saved = localStorage.getItem('gpbao_machineOpTimes');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  const updateMachineOpTime = (machineNum, timeStr) => {
+    const newTimes = { ...machineOpTimes, [machineNum]: parseFloat(timeStr) };
+    setMachineOpTimes(newTimes);
+    localStorage.setItem('gpbao_machineOpTimes', JSON.stringify(newTimes));
+  };
+
   useEffect(() => {
     const handlePopState = () => {
       const hash = window.location.hash.replace('#', '');
@@ -284,17 +294,28 @@ function MainLayout({ currentUser, onLogout }) {
           const totalC = targetTurn ? targetTurn.totalCycles : 1;
           const cycleNum = l.cycle_number || 1;
           
-          if (!loadedProg[l.turn_id] || cycleNum >= loadedProg[l.turn_id].currentCycle) {
+          if (!loadedProg[l.turn_id]) {
             loadedProg[l.turn_id] = {
               currentCycle: cycleNum,
-              isFinished: !!l.who_ended && cycleNum >= totalC,
-              isStarted: !!l.who_started,
-              lastEndedTime: l.end_time ? format(new Date(l.end_time), 'dd-MMM, HH:mm') : null,
-              lastSavedBy: l.who_ended || l.who_started,
-              remarksObj: { [cycleNum]: l.admin_remark },
-              durationMinutes: l.duration_minutes || 0
+              isFinished: false,
+              isStarted: false,
+              lastEndedTime: null,
+              lastSavedBy: null,
+              remarksObj: {},
+              cycleDurations: {}
             };
           }
+
+          if (cycleNum >= loadedProg[l.turn_id].currentCycle) {
+            loadedProg[l.turn_id].currentCycle = cycleNum;
+            loadedProg[l.turn_id].isFinished = !!l.who_ended && cycleNum >= totalC;
+            loadedProg[l.turn_id].isStarted = !!l.who_started;
+            loadedProg[l.turn_id].lastEndedTime = l.end_time ? format(new Date(l.end_time), 'dd-MMM, HH:mm') : null;
+            loadedProg[l.turn_id].lastSavedBy = l.who_ended || l.who_started;
+          }
+          
+          loadedProg[l.turn_id].remarksObj[cycleNum] = l.admin_remark;
+          loadedProg[l.turn_id].cycleDurations[cycleNum] = l.duration_minutes || 0;
         });
         setGlobalProgressData(prev => ({ ...prev, ...loadedProg }));
       }
@@ -332,6 +353,8 @@ function MainLayout({ currentUser, onLogout }) {
           onTurnsChange={setGlobalTurnsData}
           onProgressChange={setGlobalProgressData}
           refreshData={fetchSupabaseData}
+          machineOpTimes={machineOpTimes}
+          onUpdateMachineOpTime={updateMachineOpTime}
         />
       </div>
       
@@ -344,7 +367,11 @@ function MainLayout({ currentUser, onLogout }) {
       </div>
 
       <div className={activeTab === 'dashboard' ? 'block' : 'hidden'}>
-        <DashboardPage turnsData={globalTurnsData} progressData={globalProgressData} />
+        <DashboardPage 
+          turnsData={globalTurnsData} 
+          progressData={globalProgressData} 
+          machineOpTimes={machineOpTimes}
+        />
       </div>
       
       <div className={activeTab === 'profile' ? 'block' : 'hidden'}>
@@ -358,22 +385,22 @@ function MainLayout({ currentUser, onLogout }) {
       </div>
 
       <div className="fixed bottom-0 w-full max-w-md mx-auto inset-x-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-lg border-t dark:border-gray-700 flex justify-around p-3 rounded-t-3xl z-40 pb-safe">
-        <button onClick={handleWashingClick} className={`flex flex-col items-center transition ${activeTab === 'washing' ? 'text-black dark:text-white scale-105 font-bold' : 'text-gray-400'}`}>
+        <button onClick={handleWashingClick} className={`flex flex-col items-center transition ${activeTab === 'washing' ? 'text-blue-500 scale-105 font-bold' : 'text-gray-400'}`}>
           <WashingMachine size={22} />
           <span className="text-[10px] mt-1">Washing</span>
         </button>
 
-        <button onClick={() => changeTab('tracking')} className={`flex flex-col items-center transition ${activeTab === 'tracking' ? 'text-black dark:text-white scale-105 font-bold' : 'text-gray-400'}`}>
+        <button onClick={() => changeTab('tracking')} className={`flex flex-col items-center transition ${activeTab === 'tracking' ? 'text-blue-500 scale-105 font-bold' : 'text-gray-400'}`}>
           <Target size={22} />
           <span className="text-[10px] mt-1">Tracking</span>
         </button>
 
-        <button onClick={() => changeTab('dashboard')} className={`flex flex-col items-center transition ${activeTab === 'dashboard' ? 'text-black dark:text-white scale-105 font-bold' : 'text-gray-400'}`}>
+        <button onClick={() => changeTab('dashboard')} className={`flex flex-col items-center transition ${activeTab === 'dashboard' ? 'text-blue-500 scale-105 font-bold' : 'text-gray-400'}`}>
           <BarChart3 size={22} />
           <span className="text-[10px] mt-1">Dashboard</span>
         </button>
 
-        <button onClick={() => changeTab('profile')} className={`flex flex-col items-center transition ${activeTab === 'profile' ? 'text-black dark:text-white scale-105 font-bold' : 'text-gray-400'}`}>
+        <button onClick={() => changeTab('profile')} className={`flex flex-col items-center transition ${activeTab === 'profile' ? 'text-blue-500 scale-105 font-bold' : 'text-gray-400'}`}>
           <User size={22} />
           <span className="text-[10px] mt-1">Profile</span>
         </button>
@@ -383,7 +410,7 @@ function MainLayout({ currentUser, onLogout }) {
 }
 
 // --- TRANG WASHING ---
-function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turnProgress, onTurnsChange, onProgressChange, refreshData }) {
+function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turnProgress, onTurnsChange, onProgressChange, refreshData, machineOpTimes, onUpdateMachineOpTime }) {
   const [time, setTime] = useState(format(new Date(), 'HH:mm'));
   const [date, setDate] = useState(format(new Date(), 'dd-MMM'));
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
@@ -396,6 +423,10 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
   const [editingMachineName, setEditingMachineName] = useState(false);
   const [tempMachineName, setTempMachineName] = useState('');
 
+  // TRẠNG THÁI CHỈNH SỬA OPERATION TIME
+  const [editingOpTime, setEditingOpTime] = useState(false);
+  const [tempOpTime, setTempOpTime] = useState(1);
+
   const [viewMode, setViewMode] = useState('setup'); 
   const [activeRunnerId, setActiveRunnerId] = useState(null); 
   const [modalTurn, setModalTurn] = useState(null);
@@ -406,7 +437,6 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
   const [cyclesWarningModal, setCyclesWarningModal] = useState(false);
   const [busyTurnName, setBusyTurnName] = useState(null);
 
-  // FIX LỖI BACK BUTTON: Lắng nghe lịch sử trình duyệt để đóng màn hình Runner khi người dùng vuốt về
   useEffect(() => {
     const onPopState = () => {
       if (viewMode === 'runner' && window.location.hash !== '#runner') {
@@ -485,10 +515,10 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
     }
   };
 
-  const updateTurnProgress = async (turnId, currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj) => {
+  const updateTurnProgress = async (turnId, currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj, cycleDurations) => {
     const updated = {
       ...turnProgress,
-      [turnId]: { currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj }
+      [turnId]: { currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj, cycleDurations }
     };
     onProgressChange(updated);
   };
@@ -635,7 +665,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
           </div>
         ) : !selectedMachine ? (
           <div className="mt-6 animate-in fade-in slide-in-from-right-4">
-            <button onClick={() => setSelectedRB(null)} className="mb-4 text-sm font-bold text-gray-500 hover:text-black dark:hover:text-white transition">{"< Back to RB"}</button>
+            <button onClick={() => setSelectedRB(null)} className="mb-4 text-sm font-bold text-gray-500 hover:text-blue-500 transition">{"< Back to RB"}</button>
             <div className="flex flex-col items-center justify-center mb-6">
               <RBLogo rbName={selectedRB} className="max-h-12 mb-2" />
             </div>
@@ -671,7 +701,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
           </div>
         ) : (
           <div className="mt-6 animate-in fade-in slide-in-from-right-4">
-            <button onClick={() => setSelectedMachine(null)} className="mb-4 text-sm font-bold text-gray-500 hover:text-black dark:hover:text-white transition">{"< Back to Machine"}</button>
+            <button onClick={() => setSelectedMachine(null)} className="mb-4 text-sm font-bold text-gray-500 hover:text-blue-500 transition">{"< Back to Machine"}</button>
             
             <div className="flex flex-col items-center justify-center mb-4">
               <RBLogo rbName={selectedRB} className="max-h-10 mb-2" />
@@ -711,6 +741,40 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
                 >
                   {getMachineDisplayName(selectedMachine)}
                 </h3>
+              )}
+
+              {/* NƠI CHỈNH SỬA VÀ HIỂN THỊ OPERATION TIME */}
+              {editingOpTime && currentUser.role === 'admin' ? (
+                <div className="flex items-center justify-center gap-2 max-w-xs mx-auto mt-2">
+                  <input 
+                    type="number" step="0.5" min="0.5"
+                    value={tempOpTime} 
+                    onChange={e => setTempOpTime(e.target.value)} 
+                    className="p-1 border rounded-lg font-bold text-center dark:bg-gray-800 dark:text-white text-xs w-16 outline-none"
+                  />
+                  <button 
+                    onClick={() => {
+                      onUpdateMachineOpTime(selectedMachine, tempOpTime || 1);
+                      setEditingOpTime(false);
+                    }}
+                    className="bg-blue-500 text-white px-2 py-1 rounded-lg text-[10px] font-bold"
+                  >
+                    Save
+                  </button>
+                </div>
+              ) : (
+                <p 
+                  onDoubleClick={() => {
+                    if (currentUser.role === 'admin') {
+                      setTempOpTime(machineOpTimes[selectedMachine] || 1);
+                      setEditingOpTime(true);
+                    }
+                  }}
+                  className="text-xs font-bold text-gray-500 cursor-pointer select-none hover:text-blue-500 transition mt-1"
+                  title={currentUser.role === 'admin' ? 'Double click to edit operation time' : ''}
+                >
+                  Operation time: {machineOpTimes[selectedMachine] || 1}h
+                </p>
               )}
             </div>
             
@@ -906,7 +970,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
                       setViewMode('setup');
                     }
                   }}
-                  onProgressUpdate={(currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj) => updateTurnProgress(turnKey, currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj)} 
+                  onProgressUpdate={(currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj, cycleDurations) => updateTurnProgress(turnKey, currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj, cycleDurations)} 
                 />
             </div>
          ))}
@@ -962,7 +1026,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
 }
 
 // --- TRANG DASHBOARD ---
-function DashboardPage({ turnsData, progressData }) {
+function DashboardPage({ turnsData, progressData, machineOpTimes }) {
   const [filterPeriod, setFilterPeriod] = useState('Week');
   const [selectedMachineRBFilter, setSelectedMachineRBFilter] = useState('ALL');
   const [showMachineRBFilterDropdown, setShowMachineRBFilterDropdown] = useState(false);
@@ -1041,7 +1105,14 @@ function DashboardPage({ turnsData, progressData }) {
         } else if (prog?.isStarted) {
           totalCycles += Number(prog.currentCycle || 1);
         }
-        totalDurationMins += Number(prog?.durationMinutes || 0);
+
+        // TÍNH DURATION (THỜI GIAN THEO OPERATION TIME QUY ĐỊNH)
+        const opTimeMins = (machineOpTimes[config.machine] || 1) * 60;
+        if (prog?.cycleDurations) {
+          Object.values(prog.cycleDurations).forEach(actualDur => {
+            totalDurationMins += Math.min(Number(actualDur), opTimeMins);
+          });
+        }
       }
     });
 
@@ -1071,7 +1142,14 @@ function DashboardPage({ turnsData, progressData }) {
           } else if (prog?.isStarted) {
             totalCycles += Number(prog.currentCycle || 1);
           }
-          totalDurationMins += Number(prog?.durationMinutes || 0);
+
+          // TÍNH DURATION (THỜI GIAN THEO OPERATION TIME QUY ĐỊNH)
+          const opTimeMins = (machineOpTimes[config.machine] || 1) * 60;
+          if (prog?.cycleDurations) {
+            Object.values(prog.cycleDurations).forEach(actualDur => {
+              totalDurationMins += Math.min(Number(actualDur), opTimeMins);
+            });
+          }
         }
       }
     });
@@ -1132,6 +1210,7 @@ function DashboardPage({ turnsData, progressData }) {
         </button>
       </div>
 
+      {/* 1. RB STATISTICS */}
       <div className="bg-gray-900 text-white p-6 rounded-3xl shadow-xl border border-gray-800 mb-6">
         <h3 className="font-black text-center text-lg mb-4 tracking-wide">
           RB Statistics
@@ -1144,8 +1223,9 @@ function DashboardPage({ turnsData, progressData }) {
           <span className="flex items-center gap-1.5 text-cyan-400">
             <span className="w-2.5 h-2.5 rounded-sm bg-cyan-400"></span> Turns
           </span>
+          {/* ĐÃ ĐỔI TÊN THÀNH Time (h) NHƯ YÊU CẦU */}
           <span className="flex items-center gap-1.5 text-emerald-400">
-            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-400"></span> Duration (h)
+            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-400"></span> Time (h)
           </span>
         </div>
 
@@ -1179,6 +1259,7 @@ function DashboardPage({ turnsData, progressData }) {
         </div>
       </div>
 
+      {/* 2. BIỂU ĐỒ TRÒN BREAKDOWN */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-md border border-gray-100 dark:border-gray-700 mb-6">
         <h3 className="font-black text-base mb-4 flex items-center gap-2">
           <RotateCw size={18} className="text-blue-500"/> Cycles Breakdown by RB
@@ -1208,6 +1289,7 @@ function DashboardPage({ turnsData, progressData }) {
         </div>
       </div>
 
+      {/* 3. MACHINE METRICS */}
       <div className="bg-gray-900 text-white p-6 rounded-3xl shadow-xl border border-gray-800 mb-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-black text-base flex items-center gap-2">
@@ -1818,7 +1900,11 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
     if (onProgressUpdate) {
        const lastDone = cyclesData[cyclesData.length - 1];
        const lastEndedFormatted = lastDone ? `${lastDone.recordDate}, ${format(lastDone.end, 'HH:mm')}` : null;
-       onProgressUpdate(currentCycle, isFinished, !!startTime, lastEndedFormatted, currentUser.username, remarks);
+       
+       const durations = {};
+       cyclesData.forEach(d => { durations[d.cycle] = d.duration; });
+       
+       onProgressUpdate(currentCycle, isFinished, !!startTime, lastEndedFormatted, currentUser.username, remarks, durations);
     }
   }, [currentCycle, isFinished, startTime, cyclesData, remarks]);
 
@@ -2035,7 +2121,7 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
 
   return (
     <div className="p-4 max-w-md mx-auto">
-      <button onClick={onBack} className="mb-6 text-sm font-bold text-gray-500 hover:text-black dark:hover:text-white transition">{"< Back to Turn"}</button>
+      <button onClick={onBack} className="mb-6 text-sm font-bold text-gray-500 hover:text-blue-500 transition">{"< Back to Turn"}</button>
       
       <div className={`mb-8 p-6 rounded-3xl shadow-lg border-2 transition-colors ${isFinished ? 'bg-green-50 dark:bg-green-900/20 border-green-500' : 'bg-white dark:bg-gray-800 border-transparent dark:border-gray-700'}`}>
         <div className="flex justify-between items-start mb-4">
