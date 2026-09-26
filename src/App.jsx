@@ -9,12 +9,14 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// DANH SÁCH MÁY MẶC ĐỊNH
+const BASE_MACHINES = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [theme, setTheme] = useState('light');
 
   useEffect(() => {
-    // FIX MOBILE BROWSER (XÓA VỆT TRẮNG TRÊN/DƯỚI): Tự động cấu hình theme-color cho thanh trạng thái
     let metaThemeColor = document.querySelector("meta[name=theme-color]");
     if (!metaThemeColor) {
       metaThemeColor = document.createElement("meta");
@@ -27,13 +29,11 @@ export default function App() {
       if (currentHour >= 6 && currentHour < 18) {
         setTheme('light');
         document.documentElement.classList.remove('dark');
-        // Ép màu nền gốc của thẻ body trình duyệt
         document.body.style.backgroundColor = '#f9fafb'; 
         metaThemeColor.setAttribute("content", "#f9fafb");
       } else {
         setTheme('dark');
         document.documentElement.classList.add('dark');
-        // Ép màu nền gốc của thẻ body trình duyệt thành Dark Mode
         document.body.style.backgroundColor = '#111827'; 
         metaThemeColor.setAttribute("content", "#111827");
       }
@@ -48,7 +48,7 @@ export default function App() {
   return <MainLayout currentUser={currentUser} theme={theme} onLogout={() => setCurrentUser(null)} />;
 }
 
-// --- MÀN HÌNH ĐĂNG NHẬP & ĐĂNG KÝ THẬT 100% ---
+// --- MÀN HÌNH ĐĂNG NHẬP & ĐĂNG KÝ ---
 function AuthScreen({ onLogin }) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
@@ -204,7 +204,7 @@ function AuthScreen({ onLogin }) {
 
 // --- GIAO DIỆN CHÍNH & BOTTOM NAV ---
 function MainLayout({ currentUser, onLogout }) {
-  const [activeTab, setActiveTab] = useState('washing');
+  const [activeTab, setActiveTab] = useState('dashboard'); 
   const [resetWashingTrigger, setResetWashingTrigger] = useState(0);
 
   const [globalTurnsData, setGlobalTurnsData] = useState({});
@@ -277,7 +277,8 @@ function MainLayout({ currentUser, onLogout }) {
   };
 
   return (
-    <div className="min-h-screen pb-28 text-black dark:text-white font-sans transition-colors relative bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen pb-28 text-black dark:text-white font-sans transition-colors relative">
+      <div className="fixed inset-0 -z-10 bg-gray-50 dark:bg-gray-900 pointer-events-none"></div>
 
       <div className={activeTab === 'washing' ? 'block' : 'hidden'}>
         <WashingPage 
@@ -387,7 +388,9 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
   }, []);
 
   const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
-  const machines = [11, 12, 13, 14, 15];
+  
+  const detectedMachines = Object.values(savedTurns).map(t => t.machine).filter(Boolean);
+  const machines = Array.from(new Set([...BASE_MACHINES, ...detectedMachines])).sort((a, b) => a - b);
 
   const calculateWeeklyCycles = (rb, machineNum) => {
     let total = 0;
@@ -423,6 +426,14 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
 
     setActiveRunnerId(turnId);
     setViewMode('runner');
+  };
+
+  const updateTurnProgress = async (turnId, currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj) => {
+    const updated = {
+      ...turnProgress,
+      [turnId]: { currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj }
+    };
+    onProgressChange(updated);
   };
 
   const handleDeleteTurn = async (e, turnKey) => {
@@ -900,18 +911,12 @@ function DashboardPage({ turnsData, progressData }) {
 
   const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
 
-  const detectedMachines = Array.from(
-    new Set(Object.values(turnsData).map(t => t.machine).filter(Boolean))
-  ).sort((a, b) => a - b);
-
-  const activeMachinesList = detectedMachines.length > 0 ? detectedMachines : [11, 12, 13, 14, 15];
+  const detectedMachines = Object.values(turnsData).map(t => t.machine).filter(Boolean);
+  const activeMachinesList = Array.from(new Set([...BASE_MACHINES, ...detectedMachines])).sort((a, b) => a - b);
 
   const defaultMachineOwners = {
-    11: 'puma',
-    12: 'adidas',
-    13: 'ad',
-    14: 'decathlon',
-    15: 'nike'
+    11: 'puma', 12: 'adidas', 13: 'ad', 14: 'decathlon', 15: 'nike',
+    16: 'under armour', 17: 'gpd', 18: 'puma', 19: 'adidas', 20: 'nike'
   };
 
   const weekOptions = [
@@ -975,7 +980,7 @@ function DashboardPage({ turnsData, progressData }) {
         } else if (prog?.isStarted) {
           totalCycles += Number(prog.currentCycle || 1);
         }
-        totalDurationMins += Number(prog?.durationMinutes || (config.totalCycles || 1) * 60);
+        totalDurationMins += Number(prog?.durationMinutes || 0);
       }
     });
 
@@ -1005,7 +1010,7 @@ function DashboardPage({ turnsData, progressData }) {
           } else if (prog?.isStarted) {
             totalCycles += Number(prog.currentCycle || 1);
           }
-          totalDurationMins += Number(prog?.durationMinutes || (config.totalCycles || 1) * 60);
+          totalDurationMins += Number(prog?.durationMinutes || 0);
         }
       }
     });
@@ -1106,7 +1111,7 @@ function DashboardPage({ turnsData, progressData }) {
                 </div>
 
                 <div className="w-8 h-6 flex items-center justify-center mt-3">
-                  <RBLogo rbName={item.rb} className="max-h-5 max-w-full" />
+                  <RBLogo rbName={item.rb} className="max-h-5 max-w-full" forceWhite />
                 </div>
               </div>
             ))}
@@ -1181,10 +1186,10 @@ function DashboardPage({ turnsData, progressData }) {
           </div>
         </div>
 
-        <div className="overflow-x-auto pb-4 custom-scrollbar">
-          <div className="flex items-end gap-6 min-w-[350px] h-48 px-2 pt-6 border-b border-gray-800">
+        <div className="overflow-x-auto pb-4 custom-scrollbar scroll-smooth">
+          <div className="flex items-end gap-5 w-max min-w-full px-4 pt-6 border-b border-gray-800 pb-2">
             {machineStats.map(item => (
-              <div key={item.machine} className="flex-1 flex flex-col items-center justify-end h-full min-w-[50px]">
+              <div key={item.machine} className="flex flex-col items-center justify-end h-full min-w-[65px]">
                 <div className="flex items-end gap-1.5 w-full justify-center h-36">
                   <div className="flex flex-col items-center flex-1 max-w-[16px] h-full justify-end">
                     <span className="text-[9px] font-black text-blue-400 mb-1">{item.totalCycles}</span>
@@ -1204,7 +1209,7 @@ function DashboardPage({ turnsData, progressData }) {
 
                 <div className="flex flex-col items-center gap-1 mt-3">
                   <div className="w-5 h-4 flex items-center justify-center">
-                    <RBLogo rbName={item.rbOwner} className="max-h-4 max-w-full" />
+                    <RBLogo rbName={item.rbOwner} className="max-h-4 max-w-full" forceWhite />
                   </div>
                   <span className="text-xs font-extrabold uppercase text-gray-300 tracking-wider">
                     {item.machine}
@@ -1307,10 +1312,8 @@ function DashboardPage({ turnsData, progressData }) {
 function TrackingPage({ turnsData, progressData, onOpenTurn }) {
   const RBs = ['ad', 'adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd'];
   
-  const detectedMachines = Array.from(
-    new Set(Object.values(turnsData).map(t => t.machine).filter(Boolean))
-  ).sort((a, b) => a - b);
-  const machinesList = detectedMachines.length > 0 ? detectedMachines : [11, 12, 13, 14, 15];
+  const detectedMachines = Object.values(turnsData).map(t => t.machine).filter(Boolean);
+  const machinesList = Array.from(new Set([...BASE_MACHINES, ...detectedMachines])).sort((a, b) => a - b);
   
   const [selectedRBs, setSelectedRBs] = useState([]); 
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL');
@@ -1570,17 +1573,20 @@ function TrackingPage({ turnsData, progressData, onOpenTurn }) {
 }
 
 // --- HELPER SHOW LOGO ---
-function RBLogo({ rbName, className = "h-12" }) {
+function RBLogo({ rbName, className = "h-12", forceWhite = false }) {
   const keepOriginalColor = rbName === 'ad' || rbName === 'decathlon';
   if (rbName === 'gpd') {
-    return <span className="font-black text-xl uppercase tracking-wider dark:text-gray-100">GPD</span>;
+    return <span className={`font-black text-xl uppercase tracking-wider ${forceWhite ? 'text-white' : 'dark:text-gray-100'}`}>GPD</span>;
   }
+  
+  const colorClass = forceWhite ? 'brightness-0 invert' : 'dark:brightness-0 dark:invert';
+  
   return (
     <img 
       src={`/${rbName}.png`} 
       alt={rbName} 
       className={`${className} max-w-[85%] object-contain transition-all ${
-        keepOriginalColor ? '' : 'dark:brightness-0 dark:invert'
+        keepOriginalColor ? '' : colorClass
       }`} 
       onError={(e) => { 
         e.target.style.display = 'none'; 
