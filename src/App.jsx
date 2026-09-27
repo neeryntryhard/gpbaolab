@@ -346,7 +346,7 @@ function MainLayout({ currentUser, onLogout }) {
   const isWashingTabActive = activeTab === 'washing' || ['machine', 'setup', 'runner'].includes(activeTab);
 
   return (
-    <div className="min-h-[100dvh] pb-28 text-black dark:text-white font-sans transition-colors relative">
+    <div className="min-h-[100dvh] pb-safe text-black dark:text-white font-sans transition-colors relative">
       <div className="fixed inset-0 -z-10 bg-gray-50 dark:bg-gray-900 pointer-events-none"></div>
 
       <div className={isWashingTabActive ? 'block' : 'hidden'}>
