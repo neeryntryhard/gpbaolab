@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { WashingMachine, BarChart3, User, Calendar as CalendarIcon, AlertTriangle, X, ChevronDown, Plus, CheckCircle2, Info, Shirt, RotateCw, Clock, LogOut, Key, Target, ChevronLeft, ChevronRight, ShieldCheck, Trash2, Edit3, Repeat, Filter, Building, FileText, Check, Save } from 'lucide-react';
+import { WashingMachine, BarChart3, User, Calendar as CalendarIcon, AlertTriangle, X, ChevronDown, Plus, CheckCircle2, Info, Shirt, RotateCw, Clock, LogOut, Key, Target, ChevronLeft, ChevronRight, ShieldCheck, Trash2, Edit3, Repeat, MessageSquare, Filter, Building, FileText, Check, Save } from 'lucide-react';
 import { format, differenceInMinutes, getHours, addDays, startOfWeek, endOfWeek, parse, isSameDay, isBefore, startOfDay } from 'date-fns';
 import { createClient } from '@supabase/supabase-js';
 
@@ -9,6 +9,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// BIẾN TOÀN CỤC: AD ĐỨNG CUỐI CÙNG SAU GPD
 const GLOBAL_RBS = ['adidas', 'nike', 'puma', 'under armour', 'decathlon', 'gpd', 'ad'];
 const BASE_MACHINES = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
@@ -33,11 +34,13 @@ export default function App() {
       if (currentHour >= 6 && currentHour < 18) {
         setTheme('light');
         document.documentElement.classList.remove('dark');
+        document.documentElement.style.backgroundColor = '#f9fafb';
         document.body.style.backgroundColor = '#f9fafb'; 
         metaThemeColor.setAttribute("content", "#f9fafb");
       } else {
         setTheme('dark');
         document.documentElement.classList.add('dark');
+        document.documentElement.style.backgroundColor = '#111827';
         document.body.style.backgroundColor = '#111827'; 
         metaThemeColor.setAttribute("content", "#111827");
       }
@@ -166,7 +169,7 @@ function AuthScreen({ onLogin }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4 transition-colors">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4 transition-colors">
       <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-2xl w-full max-w-sm">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold dark:text-white mb-2 tracking-tighter">lab.</h1>
@@ -295,17 +298,28 @@ function MainLayout({ currentUser, onLogout }) {
           const totalC = targetTurn ? targetTurn.totalCycles : 1;
           const cycleNum = l.cycle_number || 1;
           
-          if (!loadedProg[l.turn_id] || cycleNum >= loadedProg[l.turn_id].currentCycle) {
+          if (!loadedProg[l.turn_id]) {
             loadedProg[l.turn_id] = {
               currentCycle: cycleNum,
-              isFinished: !!l.who_ended && cycleNum >= totalC,
-              isStarted: !!l.who_started,
-              lastEndedTime: l.end_time ? format(new Date(l.end_time), 'dd-MMM, HH:mm') : null,
-              lastSavedBy: l.who_ended || l.who_started,
-              remarksObj: { [cycleNum]: l.admin_remark },
-              durationMinutes: l.duration_minutes || 0
+              isFinished: false,
+              isStarted: false,
+              lastEndedTime: null,
+              lastSavedBy: null,
+              remarksObj: {},
+              cycleDurations: {}
             };
           }
+
+          if (cycleNum >= loadedProg[l.turn_id].currentCycle) {
+            loadedProg[l.turn_id].currentCycle = cycleNum;
+            loadedProg[l.turn_id].isFinished = !!l.who_ended && cycleNum >= totalC;
+            loadedProg[l.turn_id].isStarted = !!l.who_started;
+            loadedProg[l.turn_id].lastEndedTime = l.end_time ? format(new Date(l.end_time), 'dd-MMM, HH:mm') : null;
+            loadedProg[l.turn_id].lastSavedBy = l.who_ended || l.who_started;
+          }
+
+          loadedProg[l.turn_id].remarksObj[cycleNum] = l.admin_remark;
+          loadedProg[l.turn_id].cycleDurations[cycleNum] = l.duration_minutes || 0;
         });
         setGlobalProgressData(prev => ({ ...prev, ...loadedProg }));
       }
@@ -332,7 +346,7 @@ function MainLayout({ currentUser, onLogout }) {
   const isWashingTabActive = activeTab === 'washing' || ['machine', 'setup', 'runner'].includes(activeTab);
 
   return (
-    <div className="min-h-screen pb-28 text-black dark:text-white font-sans transition-colors relative">
+    <div className="min-h-[100dvh] pb-28 text-black dark:text-white font-sans transition-colors relative">
       <div className="fixed inset-0 -z-10 bg-gray-50 dark:bg-gray-900 pointer-events-none"></div>
 
       <div className={isWashingTabActive ? 'block' : 'hidden'}>
@@ -412,6 +426,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
   const [selectedRB, setSelectedRB] = useState(null);
   const [selectedMachine, setSelectedMachine] = useState(null);
 
+  // LƯU VÀ ĐỌC TÊN MÁY CUSTOM TỪ LOCALSTORAGE
   const [machineCustomNames, setMachineCustomNames] = useState(() => {
     const saved = localStorage.getItem('gpbao_machineCustomNames');
     return saved ? JSON.parse(saved) : {};
@@ -649,6 +664,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
           <div className="mt-6">
              <div className="flex justify-center mb-5">
                <div className="relative flex items-center justify-center">
+                 {/* SÓNG LAN NHANH VÀ MƯỢT (1.2 giây) */}
                  <div className="absolute inset-0 bg-blue-400 dark:bg-blue-600 rounded-full animate-[ping_1.2s_cubic-bezier(0,0,0.2,1)_infinite] opacity-20"></div>
                  <div className="relative p-5 bg-blue-100 dark:bg-blue-900/40 rounded-full shadow-inner z-10">
                    <WashingMachine size={48} className="text-blue-500" strokeWidth={1.5} />
@@ -674,6 +690,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
             <div className="flex flex-col items-center justify-center mb-6">
               <RBLogo rbName={selectedRB} className="max-h-12 mb-2" />
             </div>
+            {/* GIỮ NGUYÊN GRID 2 CỘT CHO MÁY GIẶT */}
             <div className="grid grid-cols-2 gap-4">
               {machines.map(num => {
                 const isMachineRunning = Object.entries(savedTurns).some(([k, cfg]) => {
@@ -1209,6 +1226,7 @@ function DashboardPage({ turnsData, progressData, machineOpTimes }) {
         </button>
       </div>
 
+      {/* 1. RB STATISTICS */}
       <div className="bg-gray-900 text-white p-6 rounded-3xl shadow-xl border border-gray-800 mb-6">
         <h3 className="font-black text-center text-lg mb-4 tracking-wide">
           RB Statistics
@@ -1256,6 +1274,7 @@ function DashboardPage({ turnsData, progressData, machineOpTimes }) {
         </div>
       </div>
 
+      {/* 2. BIỂU ĐỒ TRÒN BREAKDOWN */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-md border border-gray-100 dark:border-gray-700 mb-6">
         <h3 className="font-black text-base mb-4 flex items-center gap-2">
           <RotateCw size={18} className="text-blue-500"/> Cycles Breakdown by RB
@@ -1285,6 +1304,7 @@ function DashboardPage({ turnsData, progressData, machineOpTimes }) {
         </div>
       </div>
 
+      {/* 3. MACHINE METRICS */}
       <div className="bg-gray-900 text-white p-6 rounded-3xl shadow-xl border border-gray-800 mb-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-black text-base flex items-center gap-2">
@@ -1443,7 +1463,7 @@ function DashboardPage({ turnsData, progressData, machineOpTimes }) {
   );
 }
 
-// --- TRANG TRACKING ---
+// --- TRANG TRACKING (HIỂN THỊ CẢ CARRIED OVER) ---
 function TrackingPage({ turnsData, progressData, onOpenTurn }) {
   const detectedMachines = Object.values(turnsData).map(t => t.machine).filter(Boolean);
   const machinesList = Array.from(new Set([...BASE_MACHINES, ...detectedMachines])).sort((a, b) => a - b);
@@ -1477,7 +1497,6 @@ function TrackingPage({ turnsData, progressData, onOpenTurn }) {
   activeRBsToDisplay.forEach(rbName => {
     machinesList.forEach(mNum => {
       const matchedEntries = Object.entries(turnsData).filter(([key, config]) => {
-        const matchesDate = config.createdDate ? config.createdDate === date : true;
         const effectiveRB = config.borrowedRB || config.rb;
         
         const createdDateObj = parse(`${config.createdDate}-2026`, 'dd-MMM-yyyy', new Date());
@@ -2219,6 +2238,7 @@ function CycleRunner({ config, currentUser, currentDate, canEditOrAdd, onBack, o
         </div>
       )}
 
+      {/* CHI TIẾT CYCLE ĐƯỢC CHỌN (KHÔI PHỤC ĐẦY ĐỦ THỜI GIAN VÀ KHU VỰC SỬA ADMIN) */}
       {selectedCycleInfo && selectedCycleInfo !== 'current' ? (
         <div className="mt-8 p-6 bg-blue-50/50 dark:bg-gray-800/80 rounded-3xl shadow-lg border border-blue-200 dark:border-blue-900/50 animate-in slide-in-from-bottom-4 relative">
           <div className="absolute top-4 right-4 flex items-center gap-2">
@@ -2491,7 +2511,7 @@ function TurnFormModal({ turn, isBorrow, currentRB, remainingCycles, onClose, on
   );
 }
 
-// --- TRANG PROFILE ---
+// --- TRANG PROFILE THẬT 100% (KHÔI PHỤC ĐẦY ĐỦ MANAGEMENT CONTROL LỊCH SỬ KỸ THUẬT) ---
 function ProfilePage({ user, onLogout, turnsData = {}, progressData = {}, refreshData }) {
   const currentHour = getHours(new Date());
   let greeting = 'Good evening';
