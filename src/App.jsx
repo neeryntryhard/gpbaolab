@@ -218,7 +218,7 @@ function AuthScreen({ onLogin }) {
 function MainLayout({ currentUser, onLogout }) {
   const [activeTab, setActiveTab] = useState(() => {
     const hash = window.location.hash.replace('#', '');
-    return ['washing', 'tracking', 'dashboard', 'profile'].includes(hash) ? hash : 'washing';
+    return ['washing', 'machine', 'setup', 'runner', 'tracking', 'dashboard', 'profile'].includes(hash) ? hash : 'washing';
   });
 
   const [resetWashingTrigger, setResetWashingTrigger] = useState(0);
@@ -226,7 +226,6 @@ function MainLayout({ currentUser, onLogout }) {
   const [globalProgressData, setGlobalProgressData] = useState({});
   const [targetRunKey, setTargetRunKey] = useState(null);
 
-  // QUẢN LÝ THỜI GIAN QUY ĐỊNH CỦA MÁY (OPERATION TIME)
   const [machineOpTimes, setMachineOpTimes] = useState(() => {
     const saved = localStorage.getItem('gpbao_machineOpTimes');
     return saved ? JSON.parse(saved) : {};
@@ -241,15 +240,17 @@ function MainLayout({ currentUser, onLogout }) {
   useEffect(() => {
     const handlePopState = () => {
       const hash = window.location.hash.replace('#', '');
-      if (['washing', 'tracking', 'dashboard', 'profile'].includes(hash)) {
+      if (['washing', 'machine', 'setup', 'runner'].includes(hash)) {
+        setActiveTab('washing');
+      } else if (['tracking', 'dashboard', 'profile'].includes(hash)) {
         setActiveTab(hash);
-      } else if (hash === 'runner') {
+      } else {
         setActiveTab('washing');
       }
     };
     
     window.addEventListener('popstate', handlePopState);
-    if (!window.location.hash || window.location.hash === '#runner') {
+    if (!window.location.hash) {
       window.history.replaceState(null, '', '#washing');
     }
     
@@ -294,28 +295,17 @@ function MainLayout({ currentUser, onLogout }) {
           const totalC = targetTurn ? targetTurn.totalCycles : 1;
           const cycleNum = l.cycle_number || 1;
           
-          if (!loadedProg[l.turn_id]) {
+          if (!loadedProg[l.turn_id] || cycleNum >= loadedProg[l.turn_id].currentCycle) {
             loadedProg[l.turn_id] = {
               currentCycle: cycleNum,
-              isFinished: false,
-              isStarted: false,
-              lastEndedTime: null,
-              lastSavedBy: null,
-              remarksObj: {},
-              cycleDurations: {}
+              isFinished: !!l.who_ended && cycleNum >= totalC,
+              isStarted: !!l.who_started,
+              lastEndedTime: l.end_time ? format(new Date(l.end_time), 'dd-MMM, HH:mm') : null,
+              lastSavedBy: l.who_ended || l.who_started,
+              remarksObj: { [cycleNum]: l.admin_remark },
+              durationMinutes: l.duration_minutes || 0
             };
           }
-
-          if (cycleNum >= loadedProg[l.turn_id].currentCycle) {
-            loadedProg[l.turn_id].currentCycle = cycleNum;
-            loadedProg[l.turn_id].isFinished = !!l.who_ended && cycleNum >= totalC;
-            loadedProg[l.turn_id].isStarted = !!l.who_started;
-            loadedProg[l.turn_id].lastEndedTime = l.end_time ? format(new Date(l.end_time), 'dd-MMM, HH:mm') : null;
-            loadedProg[l.turn_id].lastSavedBy = l.who_ended || l.who_started;
-          }
-          
-          loadedProg[l.turn_id].remarksObj[cycleNum] = l.admin_remark;
-          loadedProg[l.turn_id].cycleDurations[cycleNum] = l.duration_minutes || 0;
         });
         setGlobalProgressData(prev => ({ ...prev, ...loadedProg }));
       }
@@ -339,11 +329,13 @@ function MainLayout({ currentUser, onLogout }) {
     changeTab('washing');
   };
 
+  const isWashingTabActive = activeTab === 'washing' || ['machine', 'setup', 'runner'].includes(activeTab);
+
   return (
     <div className="min-h-screen pb-28 text-black dark:text-white font-sans transition-colors relative">
       <div className="fixed inset-0 -z-10 bg-gray-50 dark:bg-gray-900 pointer-events-none"></div>
 
-      <div className={activeTab === 'washing' ? 'block' : 'hidden'}>
+      <div className={isWashingTabActive ? 'block' : 'hidden'}>
         <WashingPage 
           currentUser={currentUser} 
           resetTrigger={resetWashingTrigger}
@@ -385,7 +377,7 @@ function MainLayout({ currentUser, onLogout }) {
       </div>
 
       <div className="fixed bottom-0 w-full max-w-md mx-auto inset-x-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-lg border-t dark:border-gray-700 flex justify-around p-3 rounded-t-3xl z-40 pb-safe">
-        <button onClick={handleWashingClick} className={`flex flex-col items-center transition ${activeTab === 'washing' ? 'text-blue-500 scale-105 font-bold' : 'text-gray-400'}`}>
+        <button onClick={handleWashingClick} className={`flex flex-col items-center transition ${isWashingTabActive ? 'text-blue-500 scale-105 font-bold' : 'text-gray-400'}`}>
           <WashingMachine size={22} />
           <span className="text-[10px] mt-1">Washing</span>
         </button>
@@ -419,11 +411,14 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
   
   const [selectedRB, setSelectedRB] = useState(null);
   const [selectedMachine, setSelectedMachine] = useState(null);
-  const [machineCustomNames, setMachineCustomNames] = useState({});
+
+  const [machineCustomNames, setMachineCustomNames] = useState(() => {
+    const saved = localStorage.getItem('gpbao_machineCustomNames');
+    return saved ? JSON.parse(saved) : {};
+  });
   const [editingMachineName, setEditingMachineName] = useState(false);
   const [tempMachineName, setTempMachineName] = useState('');
 
-  // TRẠNG THÁI CHỈNH SỬA OPERATION TIME
   const [editingOpTime, setEditingOpTime] = useState(false);
   const [tempOpTime, setTempOpTime] = useState(1);
 
@@ -439,13 +434,21 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
 
   useEffect(() => {
     const onPopState = () => {
-      if (viewMode === 'runner' && window.location.hash !== '#runner') {
+      const hash = window.location.hash.replace('#', '');
+      if (hash === 'washing' || hash === '') {
+        setSelectedRB(null);
+        setSelectedMachine(null);
+        setViewMode('setup');
+      } else if (hash === 'machine') {
+        setSelectedMachine(null);
+        setViewMode('setup');
+      } else if (hash === 'setup') {
         setViewMode('setup');
       }
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, [viewMode]);
+  }, []);
 
   useEffect(() => {
     if (targetRunKey && savedTurns[targetRunKey]) {
@@ -546,6 +549,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
     setTimeout(() => {
       setSelectedRB(rb);
       setRippleRB(null);
+      if(window.location.hash !== '#machine') window.history.pushState(null, '', '#machine');
     }, 250);
   };
 
@@ -554,6 +558,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
     setTimeout(() => {
       setSelectedMachine(num);
       setRippleMachine(null);
+      if(window.location.hash !== '#setup') window.history.pushState(null, '', '#setup');
     }, 250);
   };
 
@@ -644,7 +649,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
           <div className="mt-6">
              <div className="flex justify-center mb-5">
                <div className="relative flex items-center justify-center">
-                 <div className="absolute inset-0 bg-blue-400 dark:bg-blue-600 rounded-full animate-[ping_3s_ease-in-out_infinite] opacity-20"></div>
+                 <div className="absolute inset-0 bg-blue-400 dark:bg-blue-600 rounded-full animate-[ping_1.2s_cubic-bezier(0,0,0.2,1)_infinite] opacity-20"></div>
                  <div className="relative p-5 bg-blue-100 dark:bg-blue-900/40 rounded-full shadow-inner z-10">
                    <WashingMachine size={48} className="text-blue-500" strokeWidth={1.5} />
                  </div>
@@ -665,7 +670,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
           </div>
         ) : !selectedMachine ? (
           <div className="mt-6 animate-in fade-in slide-in-from-right-4">
-            <button onClick={() => setSelectedRB(null)} className="mb-4 text-sm font-bold text-gray-500 hover:text-blue-500 transition">{"< Back to RB"}</button>
+            <button onClick={() => window.history.back()} className="mb-4 text-sm font-bold text-gray-500 hover:text-blue-500 transition">{"< Back to RB"}</button>
             <div className="flex flex-col items-center justify-center mb-6">
               <RBLogo rbName={selectedRB} className="max-h-12 mb-2" />
             </div>
@@ -701,7 +706,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
           </div>
         ) : (
           <div className="mt-6 animate-in fade-in slide-in-from-right-4">
-            <button onClick={() => setSelectedMachine(null)} className="mb-4 text-sm font-bold text-gray-500 hover:text-blue-500 transition">{"< Back to Machine"}</button>
+            <button onClick={() => window.history.back()} className="mb-4 text-sm font-bold text-gray-500 hover:text-blue-500 transition">{"< Back to Machine"}</button>
             
             <div className="flex flex-col items-center justify-center mb-4">
               <RBLogo rbName={selectedRB} className="max-h-10 mb-2" />
@@ -720,7 +725,9 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
                   />
                   <button 
                     onClick={() => {
-                      setMachineCustomNames({ ...machineCustomNames, [selectedMachine]: tempMachineName || `Machine ${selectedMachine}` });
+                      const newNames = { ...machineCustomNames, [selectedMachine]: tempMachineName || `Machine ${selectedMachine}` };
+                      setMachineCustomNames(newNames);
+                      localStorage.setItem('gpbao_machineCustomNames', JSON.stringify(newNames));
                       setEditingMachineName(false);
                     }}
                     className="bg-green-500 text-white p-2 rounded-xl text-xs font-bold"
@@ -963,13 +970,7 @@ function WashingPage({ currentUser, resetTrigger, targetRunKey, savedTurns, turn
                   currentUser={currentUser} 
                   currentDate={date}
                   canEditOrAdd={canEditOrAdd}
-                  onBack={() => {
-                    if (window.location.hash === '#runner') {
-                      window.history.back();
-                    } else {
-                      setViewMode('setup');
-                    }
-                  }}
+                  onBack={() => window.history.back()}
                   onProgressUpdate={(currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj, cycleDurations) => updateTurnProgress(turnKey, currentCycle, isFinished, isStarted, lastEndedTime, lastSavedBy, remarksObj, cycleDurations)} 
                 />
             </div>
@@ -1106,7 +1107,6 @@ function DashboardPage({ turnsData, progressData, machineOpTimes }) {
           totalCycles += Number(prog.currentCycle || 1);
         }
 
-        // TÍNH DURATION (THỜI GIAN THEO OPERATION TIME QUY ĐỊNH)
         const opTimeMins = (machineOpTimes[config.machine] || 1) * 60;
         if (prog?.cycleDurations) {
           Object.values(prog.cycleDurations).forEach(actualDur => {
@@ -1142,8 +1142,7 @@ function DashboardPage({ turnsData, progressData, machineOpTimes }) {
           } else if (prog?.isStarted) {
             totalCycles += Number(prog.currentCycle || 1);
           }
-
-          // TÍNH DURATION (THỜI GIAN THEO OPERATION TIME QUY ĐỊNH)
+          
           const opTimeMins = (machineOpTimes[config.machine] || 1) * 60;
           if (prog?.cycleDurations) {
             Object.values(prog.cycleDurations).forEach(actualDur => {
@@ -1210,7 +1209,6 @@ function DashboardPage({ turnsData, progressData, machineOpTimes }) {
         </button>
       </div>
 
-      {/* 1. RB STATISTICS */}
       <div className="bg-gray-900 text-white p-6 rounded-3xl shadow-xl border border-gray-800 mb-6">
         <h3 className="font-black text-center text-lg mb-4 tracking-wide">
           RB Statistics
@@ -1223,7 +1221,6 @@ function DashboardPage({ turnsData, progressData, machineOpTimes }) {
           <span className="flex items-center gap-1.5 text-cyan-400">
             <span className="w-2.5 h-2.5 rounded-sm bg-cyan-400"></span> Turns
           </span>
-          {/* ĐÃ ĐỔI TÊN THÀNH Time (h) NHƯ YÊU CẦU */}
           <span className="flex items-center gap-1.5 text-emerald-400">
             <span className="w-2.5 h-2.5 rounded-sm bg-emerald-400"></span> Time (h)
           </span>
@@ -1259,7 +1256,6 @@ function DashboardPage({ turnsData, progressData, machineOpTimes }) {
         </div>
       </div>
 
-      {/* 2. BIỂU ĐỒ TRÒN BREAKDOWN */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-md border border-gray-100 dark:border-gray-700 mb-6">
         <h3 className="font-black text-base mb-4 flex items-center gap-2">
           <RotateCw size={18} className="text-blue-500"/> Cycles Breakdown by RB
@@ -1289,7 +1285,6 @@ function DashboardPage({ turnsData, progressData, machineOpTimes }) {
         </div>
       </div>
 
-      {/* 3. MACHINE METRICS */}
       <div className="bg-gray-900 text-white p-6 rounded-3xl shadow-xl border border-gray-800 mb-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-black text-base flex items-center gap-2">
@@ -1484,7 +1479,21 @@ function TrackingPage({ turnsData, progressData, onOpenTurn }) {
       const matchedEntries = Object.entries(turnsData).filter(([key, config]) => {
         const matchesDate = config.createdDate ? config.createdDate === date : true;
         const effectiveRB = config.borrowedRB || config.rb;
-        return effectiveRB === rbName && config.machine === mNum && matchesDate;
+        
+        const createdDateObj = parse(`${config.createdDate}-2026`, 'dd-MMM-yyyy', new Date());
+        const targetDateObj = parse(`${date}-2026`, 'dd-MMM-yyyy', new Date());
+
+        let dateMatches = false;
+        if (config.createdDate === date) {
+          dateMatches = true;
+        } else {
+          const prog = progressData[key];
+          if (!prog?.isFinished && isBefore(createdDateObj, targetDateObj)) {
+            dateMatches = true;
+          }
+        }
+
+        return effectiveRB === rbName && config.machine === mNum && dateMatches;
       });
 
       if (matchedEntries.length > 0) {
@@ -2482,7 +2491,7 @@ function TurnFormModal({ turn, isBorrow, currentRB, remainingCycles, onClose, on
   );
 }
 
-// --- TRANG PROFILE THẬT 100% ---
+// --- TRANG PROFILE ---
 function ProfilePage({ user, onLogout, turnsData = {}, progressData = {}, refreshData }) {
   const currentHour = getHours(new Date());
   let greeting = 'Good evening';
